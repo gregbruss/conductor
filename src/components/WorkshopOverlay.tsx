@@ -1,17 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CrateVoice, VoiceRole } from '../types';
 import type { NavLevel } from '../hooks/useTreeNav';
-import { VOICE_LIBRARY, VOICE_ROLES } from '../lib/voiceLibrary';
+import { VOICE_LIBRARY } from '../lib/voiceLibrary';
 import { createBlankWorkshopVoice } from '../lib/workshopSeeds';
 import { generateRowGrid } from './Punchcard';
-import { CodeDisplay, SliderRow, updateSoundInCode, updateSliderInCode } from './InteractiveCode';
-
-type WorkshopRole = VoiceRole | 'all';
+import { CodeDisplay } from './InteractiveCode';
 
 const FILTERED_ROLES: VoiceRole[] = ['kick', 'hats', 'bass', 'pad', 'texture', 'fx'];
 
 interface Props {
-  role: WorkshopRole;
+  role: VoiceRole | 'all';
   seedVoice: CrateVoice | null;
   crate: CrateVoice[];
   previewingId: string | null;
@@ -60,79 +58,6 @@ function shuffle<T>(items: T[], seed: number): T[] {
   return values;
 }
 
-function CandidateCard({
-  voice,
-  previewing,
-  highlighted,
-  onPreview,
-  onStage,
-  onSelect,
-  onSaveToCrate,
-}: {
-  voice: CrateVoice;
-  previewing: boolean;
-  highlighted: boolean;
-  onPreview: () => void;
-  onStage: () => void;
-  onSelect: () => void;
-  onSaveToCrate: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className="text-left p-3 cursor-pointer transition-all"
-      style={{
-        border: highlighted ? '2px solid rgba(136,255,136,0.5)' : '1px solid rgba(255,255,255,0.08)',
-        background: highlighted ? 'rgba(136,255,136,0.06)' : 'rgba(255,255,255,0.02)',
-      }}
-    >
-      <div className="text-sm text-white">{voice.name}</div>
-      <div className="mt-3">
-        <PulsePreview code={voice.code} />
-      </div>
-      <div className="mt-3 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onPreview();
-          }}
-          className="px-2.5 py-1 text-[10px] cursor-pointer"
-          style={{
-            border: `1px solid ${previewing ? 'rgba(136,255,136,0.18)' : 'rgba(255,255,255,0.08)'}`,
-            color: previewing ? '#88ff88' : '#ffffff',
-          }}
-        >
-          {previewing ? '▶ previewing' : '▶ preview'}
-        </button>
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onStage();
-          }}
-          className="px-2.5 py-1 text-[10px] cursor-pointer"
-          style={{ border: '1px solid rgba(136,255,136,0.15)', color: '#88ff88' }}
-        >
-          stage
-        </button>
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onSaveToCrate();
-          }}
-          className="px-2.5 py-1 text-[10px] cursor-pointer"
-          style={{ border: '1px solid rgba(255,255,255,0.08)', color: '#ffffff' }}
-        >
-          + crate
-        </button>
-      </div>
-    </button>
-  );
-}
-
 export default function WorkshopOverlay({
   role,
   seedVoice,
@@ -147,8 +72,7 @@ export default function WorkshopOverlay({
   onAddToStage,
 }: Props) {
   const [batch, setBatch] = useState(0);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, CrateVoice>>({});
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const activeRole = role === 'all' ? 'bass' : role;
 
@@ -175,42 +99,20 @@ export default function WorkshopOverlay({
     pool.slice(0, Math.max(4, Math.min(6, pool.length)))
   ), [pool]);
 
+  // Collapse expanded card when role changes
   useEffect(() => {
-    if (seedVoice && seedVoice.role === activeRole) {
-      const cloned = { ...seedVoice, id: `seed-${Date.now()}`, tags: [...seedVoice.tags] };
-      setDrafts((current) => ({ ...current, [cloned.id]: cloned }));
-      setSelectedId(cloned.id);
-      return;
+    setExpandedId(null);
+  }, [activeRole]);
+
+  // Sync keyboard highlight with role tabs — when tabbing across roles, update the active role
+  useEffect(() => {
+    if (navLevel === 'workshop' && workshopTabIndex < FILTERED_ROLES.length) {
+      const tabRole = FILTERED_ROLES[workshopTabIndex];
+      if (tabRole && tabRole !== activeRole) {
+        onChangeRole(tabRole);
+      }
     }
-
-    if (visibleVoices.length === 0) {
-      const blank = createBlankWorkshopVoice(activeRole);
-      setDrafts((current) => ({ ...current, [blank.id]: blank }));
-      setSelectedId(blank.id);
-      return;
-    }
-
-    setSelectedId(null);
-  }, [activeRole, seedVoice, visibleVoices]);
-
-  const selectedVoice = useMemo(() => {
-    if (!selectedId) return null;
-    return drafts[selectedId] ?? visibleVoices.find((voice) => voice.id === selectedId) ?? null;
-  }, [drafts, selectedId, visibleVoices]);
-
-  const candidateTabs = selectedVoice
-    ? visibleVoices.map((voice) => drafts[voice.id] ?? voice)
-    : [];
-
-  const selectCandidate = (voice: CrateVoice) => {
-    setDrafts((current) => ({
-      ...current,
-      [voice.id]: current[voice.id] ?? { ...voice, tags: [...voice.tags] },
-    }));
-    setSelectedId(voice.id);
-  };
-
-  const selectedIsEdited = !!(selectedVoice && visibleVoices.find((voice) => voice.id === selectedVoice.id)?.code !== selectedVoice.code);
+  }, [navLevel, workshopTabIndex, activeRole, onChangeRole]);
 
   return (
     <div style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -222,7 +124,7 @@ export default function WorkshopOverlay({
           className="px-3 py-1 text-[11px] cursor-pointer"
           style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
         >
-          close
+          close (esc)
         </button>
       </div>
 
@@ -250,166 +152,113 @@ export default function WorkshopOverlay({
         })}
       </div>
 
-      {!selectedVoice ? (
-        <div className="p-4">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {visibleVoices.map((voice, idx) => {
-              const cardHighlighted = navLevel === 'workshop' && workshopTabIndex === FILTERED_ROLES.length + idx;
-              return (
-                <CandidateCard
-                  key={voice.id}
-                  voice={voice}
-                  previewing={previewingId === voice.id}
-                  highlighted={cardHighlighted}
-                  onPreview={() => onPreview(voice)}
-                  onStage={() => onAddToStage(voice)}
-                  onSelect={() => selectCandidate(voice)}
-                  onSaveToCrate={() => onSaveToCrate(voice)}
-                />
-              );
-            })}
-          </div>
-          <div className="mt-4 flex items-center justify-center">
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedId(null);
-                setBatch((value) => value + 1);
-              }}
-              className="px-4 py-2 text-[11px] cursor-pointer"
-              style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
-            >
-              ↻ more
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="p-4 space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            {candidateTabs.map((voice) => {
-              const active = voice.id === selectedVoice.id;
-              return (
+      <div className="p-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {visibleVoices.map((voice, idx) => {
+            const isHighlighted = navLevel === 'workshop' && workshopTabIndex === FILTERED_ROLES.length + idx;
+            const isExpanded = expandedId === voice.id;
+            const isPreviewing = previewingId === voice.id;
+
+            return (
+              <div
+                key={voice.id}
+                className={isExpanded ? 'md:col-span-2 xl:col-span-3' : ''}
+              >
                 <button
-                  key={voice.id}
                   type="button"
-                  onClick={() => selectCandidate(voice)}
-                  className="px-2.5 py-1 text-[10px] cursor-pointer"
+                  onClick={() => setExpandedId(isExpanded ? null : voice.id)}
+                  className="w-full text-left p-3 cursor-pointer transition-all"
                   style={{
-                    border: `1px solid ${active ? 'rgba(136,255,136,0.18)' : 'rgba(255,255,255,0.06)'}`,
-                    color: active ? '#88ff88' : 'rgba(255,255,255,0.45)',
+                    border: isHighlighted
+                      ? '2px solid rgba(136,255,136,0.5)'
+                      : isExpanded
+                        ? '1px solid rgba(136,255,136,0.2)'
+                        : '1px solid rgba(255,255,255,0.08)',
+                    background: isHighlighted
+                      ? 'rgba(136,255,136,0.06)'
+                      : isExpanded
+                        ? 'rgba(136,255,136,0.03)'
+                        : 'rgba(255,255,255,0.02)',
                   }}
                 >
-                  {voice.name}
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-white">{voice.name}</div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPreview(voice);
+                        }}
+                        className="px-2.5 py-1 text-[10px] cursor-pointer"
+                        style={{
+                          border: `1px solid ${isPreviewing ? 'rgba(136,255,136,0.18)' : 'rgba(255,255,255,0.08)'}`,
+                          color: isPreviewing ? '#88ff88' : '#ffffff',
+                        }}
+                      >
+                        {isPreviewing ? '■ stop' : '▶ preview'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAddToStage(voice);
+                        }}
+                        className="px-2.5 py-1 text-[10px] cursor-pointer"
+                        style={{ border: '1px solid rgba(136,255,136,0.15)', color: '#88ff88' }}
+                      >
+                        stage
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <PulsePreview code={voice.code} />
+                  </div>
                 </button>
-              );
-            })}
-          </div>
 
-          <div className="p-4" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
-            <div className="flex items-center justify-between gap-4">
-              <div className="text-sm text-white">
-                {selectedVoice.name}{selectedIsEdited ? ' (edited)' : ''}
+                {isExpanded && (
+                  <div
+                    className="p-3 mt-[-1px]"
+                    style={{
+                      border: '1px solid rgba(136,255,136,0.2)',
+                      borderTop: 'none',
+                      background: 'rgba(0,0,0,0.15)',
+                    }}
+                  >
+                    <CodeDisplay
+                      code={voice.code}
+                      onSoundChange={() => {}}
+                    />
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onSaveToCrate(voice)}
+                        className="px-2.5 py-1 text-[10px] cursor-pointer"
+                        style={{ border: '1px solid rgba(255,255,255,0.08)', color: '#ffffff' }}
+                      >
+                        + crate
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <button
-                type="button"
-                onClick={() => onPreview(selectedVoice)}
-                className="px-3 py-1 text-[10px] cursor-pointer"
-                style={{
-                  border: `1px solid ${previewingId === selectedVoice.id ? 'rgba(136,255,136,0.18)' : 'rgba(255,255,255,0.08)'}`,
-                  color: previewingId === selectedVoice.id ? '#88ff88' : '#ffffff',
-                }}
-              >
-                {previewingId === selectedVoice.id ? '▶ previewing' : '▶ preview'}
-              </button>
-            </div>
-
-            <div className="mt-4">
-              <div
-                className="p-3"
-                style={{ border: '1px solid rgba(255,255,255,0.08)' }}
-              >
-                <CodeDisplay
-                  code={selectedVoice.code}
-                  onSoundChange={(nextSound) => {
-                    setDrafts((current) => ({
-                      ...current,
-                      [selectedVoice.id]: {
-                        ...selectedVoice,
-                        code: updateSoundInCode(selectedVoice.code, nextSound),
-                      },
-                    }));
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <textarea
-                value={selectedVoice.code}
-                onChange={(event) => {
-                  const nextCode = event.target.value;
-                  setDrafts((current) => ({
-                    ...current,
-                    [selectedVoice.id]: {
-                      ...selectedVoice,
-                      code: nextCode,
-                    },
-                  }));
-                }}
-                className="w-full min-h-[150px] resize-y bg-transparent outline-none text-sm leading-relaxed"
-                style={{ border: '1px solid rgba(255,255,255,0.08)', color: '#ffffff', padding: '10px 12px' }}
-                spellCheck={false}
-              />
-            </div>
-
-            <div className="mt-4">
-              <PulsePreview code={selectedVoice.code} />
-            </div>
-
-            <div className="mt-4">
-              <SliderRow
-                code={selectedVoice.code}
-                onSliderChange={(sliderIndex, value) => {
-                  setDrafts((current) => ({
-                    ...current,
-                    [selectedVoice.id]: {
-                      ...selectedVoice,
-                      code: updateSliderInCode(selectedVoice.code, sliderIndex, value),
-                    },
-                  }));
-                }}
-              />
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setBatch((value) => value + 1)}
-                className="px-3 py-1.5 text-[10px] cursor-pointer"
-                style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
-              >
-                ↻ more
-              </button>
-              <button
-                type="button"
-                onClick={() => onSaveToCrate(selectedVoice)}
-                className="px-3 py-1.5 text-[10px] cursor-pointer"
-                style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
-              >
-                + crate
-              </button>
-              <button
-                type="button"
-                onClick={() => onAddToStage(selectedVoice)}
-                className="px-3 py-1.5 text-[10px] cursor-pointer"
-                style={{ border: '1px solid rgba(136,255,136,0.15)', color: '#88ff88' }}
-              >
-                stage this →
-              </button>
-            </div>
-          </div>
+            );
+          })}
         </div>
-      )}
+        <div className="mt-4 flex items-center justify-center">
+          <button
+            type="button"
+            onClick={() => {
+              setExpandedId(null);
+              setBatch((value) => value + 1);
+            }}
+            className="px-4 py-2 text-[11px] cursor-pointer"
+            style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
+          >
+            ↻ more
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

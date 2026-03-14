@@ -442,6 +442,274 @@ export const VOICE_LIBRARY: VoicePreset[] = [
 .gain(slider(0.52, 0, 1.5))`,
     tags: ['echo', 'air', 'lift'],
   },
+  // === SHOWCASE SET: "warehouse dusk" — all C minor, designed to perform together ===
+
+  {
+    id: 'kick-pressure-floor',
+    name: 'pressure floor',
+    description: 'Pitched kick with sub oscillator layered underneath. Moves air.',
+    role: 'kick',
+    code: `$: s("bd*4").gain(0.9)
+.lpf(slider(160, 60, 300))
+.add(note("c1").s("sine").gain(0.4).decay(0.15))`,
+    tags: ['sub', 'layered', 'pressure'],
+  },
+  {
+    id: 'kick-skip-pulse',
+    name: 'skip pulse',
+    description: 'Broken kick pattern that breathes. Skips beats to create tension.',
+    role: 'kick',
+    code: `$: s("bd [~ bd] ~ [bd ~]")
+.speed("<1 0.95 1.05 1>")
+.lpf(slider(200, 60, 400))
+.gain(slider(0.85, 0, 1.5))`,
+    tags: ['broken', 'skippy', 'breathing'],
+  },
+  {
+    id: 'hats-clock-drift',
+    name: 'clock drift',
+    description: 'Euclidean hat pattern. Not straight, not random — somewhere in between.',
+    role: 'hats',
+    code: `$: s("hh(5,8)")
+.hpf(slider(6000, 2000, 12000))
+.pan(sine.range(-0.3, 0.3).slow(4))
+.gain(slider(0.6, 0, 1.5))`,
+    tags: ['euclidean', 'organic', 'drift'],
+  },
+  {
+    id: 'hats-sixteen-rain',
+    name: 'sixteen rain',
+    description: '16th hats with velocity variation. Feels like drumming, not programming.',
+    role: 'hats',
+    code: `$: s("hh*16")
+.gain("<0.8 0.4 0.6 0.4 0.8 0.3 0.7 0.5 0.8 0.4 0.6 0.3 0.9 0.4 0.5 0.3>")
+.hpf(slider(7500, 3000, 12000))
+.room(0.05)`,
+    tags: ['velocity', 'human', 'rain'],
+  },
+  {
+    id: 'snare-shadow-step',
+    name: 'shadow step',
+    description: 'Dry clap-snare answer that lands behind the beat and leaves space.',
+    role: 'snare',
+    code: `$: s("<[~ cp] [~ sd] [~ cp] [~ sd cp]>")
+.room(slider(0.14, 0, 0.8))
+.hpf(slider(900, 200, 3200))
+.gain(slider(0.72, 0, 1.4))`,
+    tags: ['dry', 'answering', 'space'],
+  },
+  {
+    id: 'bass-deep-current',
+    name: 'deep current',
+    description: 'Sub bass with slow filter envelope. Feels like it\'s pulling the room.',
+    role: 'bass',
+    code: `$: note("<c2 [c2 g1] eb2 [bb1 c2]>")
+.s("sine")
+.lpf(sine.range(120, 400).slow(8))
+.gain(slider(1.1, 0, 1.5))`,
+    tags: ['sub', 'slow', 'pulling'],
+  },
+  {
+    id: 'bass-saw-climb',
+    name: 'saw climb',
+    description: 'Saw bass with rising filter. Each phrase opens up more.',
+    role: 'bass',
+    code: `$: note("<c2 eb2 g2 bb2>")
+.s("sawtooth")
+.lpf(saw.range(200, 1200).slow(4))
+.gain(slider(0.7, 0, 1.5))`,
+    tags: ['saw', 'rising', 'energy'],
+  },
+  {
+    id: 'bass-corner-pressure',
+    name: 'corner pressure',
+    description: 'Syncopated FM bass that pokes through the groove instead of sitting under it.',
+    role: 'bass',
+    code: `$: note("<c2 [~ eb2] g1 [bb1 c2]>")
+.s("sine")
+.fm(slider(1.8, 0, 4))
+.lpf(slider(520, 120, 1800))
+.gain(slider(0.78, 0, 1.3))`,
+    tags: ['fm', 'syncopated', 'pointed'],
+  },
+  {
+    id: 'pad-slow-glass',
+    name: 'slow glass',
+    description: 'Chord pad that changes once per bar. Patient. Immersive.',
+    role: 'pad',
+    code: `$: note("<[c4,eb4,g4] [bb3,d4,f4] [ab3,c4,eb4] [g3,bb3,d4]>")
+.s("supersaw")
+.lpf(slider(1800, 400, 5000))
+.room(slider(0.5, 0, 1))
+.gain(slider(0.35, 0, 1))`,
+    tags: ['chords', 'slow', 'immersive'],
+  },
+  {
+    id: 'pad-breath-cycle',
+    name: 'breath cycle',
+    description: 'Sine pad that swells and fades with LFO. Sounds like the room breathing.',
+    role: 'pad',
+    code: `$: note("[c4,g4,eb5]")
+.s("sine")
+.gain(sine.range(0.05, 0.5).slow(8))
+.room(slider(0.6, 0, 1))
+.lpf(sine.range(800, 3000).slow(16))`,
+    tags: ['breathing', 'lfo', 'ambient'],
+  },
+  {
+    id: 'pad-afterimage',
+    name: 'afterimage',
+    description: 'High suspended chord haze that hangs above the rhythm like light on smoke.',
+    role: 'pad',
+    code: `$: note("<[g4,bb4,d5] [eb4,g4,c5] [f4,ab4,c5] [g4,bb4,d5]>")
+.s("triangle")
+.delay(slider(0.34, 0, 0.9))
+.room(slider(0.58, 0, 1))
+.gain(slider(0.28, 0, 0.9))`,
+    tags: ['suspended', 'high', 'haze'],
+  },
+  {
+    id: 'lead-mirror-line',
+    name: 'mirror line',
+    description: 'Melodic line that plays forward then backward. Hypnotic.',
+    role: 'lead',
+    code: `$: note("<c5 eb5 g5 bb5 g5 eb5>")
+.s("triangle")
+.delay(slider(0.2, 0, 0.8))
+.lpf(slider(2400, 500, 6000))
+.gain(slider(0.55, 0, 1.2))`,
+    tags: ['palindrome', 'hypnotic', 'melodic'],
+  },
+  {
+    id: 'lead-stab-question',
+    name: 'stab question',
+    description: 'Short chord stabs with rests. Asks a question every bar.',
+    role: 'lead',
+    code: `$: note("<[c5,eb5,g5] ~ ~ [bb4,d5,f5]>")
+.s("square")
+.lpf(slider(1800, 400, 5000))
+.decay(0.12)
+.gain(slider(0.6, 0, 1.2))`,
+    tags: ['stabs', 'sparse', 'question'],
+  },
+  {
+    id: 'lead-late-signal',
+    name: 'late signal',
+    description: 'A delayed square motif that feels like it arrives from the far side of the room.',
+    role: 'lead',
+    code: `$: note("<~ c5 eb5 ~ [g5 bb4]>")
+.s("square")
+.delay(slider(0.42, 0, 0.9))
+.lpf(slider(2100, 400, 7000))
+.gain(slider(0.44, 0, 1.1))`,
+    tags: ['delayed', 'motif', 'distant'],
+  },
+  {
+    id: 'texture-vinyl-crackle',
+    name: 'vinyl crackle',
+    description: 'Crushed noise with filtering. Makes digital sound analog.',
+    role: 'texture',
+    code: `$: s("white")
+.gain(0.04)
+.crush(slider(6, 2, 12))
+.hpf(slider(3000, 500, 8000))
+.lpf(slider(8000, 2000, 14000))`,
+    tags: ['noise', 'analog', 'warmth'],
+  },
+  {
+    id: 'texture-distant-radio',
+    name: 'distant radio',
+    description: 'Filtered noise bursts. Like catching a signal from far away.',
+    role: 'texture',
+    code: `$: s("<white ~ ~ white> [~ white]")
+.gain(0.06)
+.crush(4)
+.hpf(slider(2000, 500, 8000))
+.lpf(slider(4000, 1000, 10000))
+.room(slider(0.5, 0, 1))`,
+    tags: ['radio', 'sparse', 'atmosphere'],
+  },
+  {
+    id: 'texture-vent-hiss',
+    name: 'vent hiss',
+    description: 'Thin air texture with a breathing filter. More pressure than percussion.',
+    role: 'texture',
+    code: `$: s("white")
+.gain(sine.range(0.01, 0.07).slow(6))
+.hpf(slider(5000, 1500, 12000))
+.pan(sine.range(-0.25, 0.25).slow(5))
+.room(slider(0.24, 0, 0.9))`,
+    tags: ['air', 'breathing', 'pressure'],
+  },
+  {
+    id: 'perc-rim-clock',
+    name: 'rim clock',
+    description: 'Steady rim click on the offbeat. The skeleton of time.',
+    role: 'perc',
+    code: `$: s("[~ rim] [~ rim]")
+.hpf(slider(2000, 500, 6000))
+.gain(slider(0.5, 0, 1.2))
+.pan("<-0.2 0.2>")`,
+    tags: ['rim', 'steady', 'clock'],
+  },
+  {
+    id: 'perc-tom-conversation',
+    name: 'tom conversation',
+    description: 'Low and mid toms talking to each other. Polyrhythmic.',
+    role: 'perc',
+    code: `$: s("lt(3,8)").gain(0.7)
+.add(s("mt(5,8)").gain(0.5))
+.lpf(slider(2000, 400, 5000))
+.room(slider(0.2, 0, 0.8))`,
+    tags: ['toms', 'polyrhythm', 'conversation'],
+  },
+  {
+    id: 'perc-trip-wire',
+    name: 'trip wire',
+    description: 'Small metallic triplet figure that makes the groove feel unstable in a good way.',
+    role: 'perc',
+    code: `$: s("<rim*3 ~ rim*3 ~>")
+.speed("<1 1 0.5 1>")
+.hpf(slider(2600, 800, 7000))
+.gain(slider(0.46, 0, 1.1))
+.pan("<-0.18 0.18 0>")`,
+    tags: ['triplet', 'metallic', 'unstable'],
+  },
+  {
+    id: 'fx-swell-lift',
+    name: 'swell lift',
+    description: 'Noise swell that rises over 4 bars. Use before a drop.',
+    role: 'fx',
+    code: `$: s("white")
+.gain(saw.range(0, 0.15).slow(4))
+.hpf(saw.range(1000, 12000).slow(4))
+.room(0.3)`,
+    tags: ['riser', 'swell', 'transition'],
+  },
+  {
+    id: 'fx-impact-scatter',
+    name: 'impact scatter',
+    description: 'Crash into scattered delay tails. One hit, long memory.',
+    role: 'fx',
+    code: `$: s("<cr ~ ~ ~>")
+.delay(slider(0.5, 0, 1))
+.room(slider(0.6, 0, 1))
+.hpf(slider(3000, 500, 10000))
+.gain(slider(0.5, 0, 1.2))`,
+    tags: ['impact', 'crash', 'delay'],
+  },
+  {
+    id: 'fx-freeze-flash',
+    name: 'freeze flash',
+    description: 'Short bright accent with enough room to cut a seam before the next phrase.',
+    role: 'fx',
+    code: `$: s("<cp cr ~ ~>")
+.room(slider(0.46, 0, 1))
+.delay(slider(0.18, 0, 0.7))
+.hpf(slider(2400, 600, 9000))
+.gain(slider(0.38, 0, 1))`,
+    tags: ['accent', 'seam', 'bright'],
+  },
 ];
 
 export function getPresetsByRole(role: VoiceRole): VoicePreset[] {

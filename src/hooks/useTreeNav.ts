@@ -329,39 +329,46 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
 
     // --- WORKSHOP LEVEL ---
     if (navLevel === 'workshop') {
+      const inRoleTabs = workshopTabIndex < workshopRoleCount;
+
       switch (event.key) {
         case 'Tab': {
           event.preventDefault();
-          if (workshopRingSize > 0) {
-            setWorkshopTabIndex((prev) => wrap(prev, event.shiftKey ? -1 : 1, workshopRingSize));
+          if (inRoleTabs) {
+            // Tab only cycles role tabs — variants update via useEffect in WorkshopOverlay
+            setWorkshopTabIndex((prev) => wrap(prev, event.shiftKey ? -1 : 1, workshopRoleCount));
+          } else {
+            // Tab cycles variant cards
+            const variantStart = workshopRoleCount;
+            const variantEnd = workshopRoleCount + workshopVisibleCount;
+            setWorkshopTabIndex((prev) => {
+              const variantIdx = prev - variantStart;
+              const next = wrap(variantIdx, event.shiftKey ? -1 : 1, workshopVisibleCount);
+              return variantStart + next;
+            });
           }
           break;
         }
         case 'Enter': {
           event.preventDefault();
-          if (workshopTabIndex < workshopRoleCount) {
-            // Enter on role tab: select role + jump to first variant
-            onWorkshopChangeRole(workshopTabIndex);
-            setWorkshopTabIndex(workshopRoleCount); // jump to first variant
+          if (inRoleTabs) {
+            // Enter on role tab: drop into variant card browsing
+            setWorkshopTabIndex(workshopRoleCount); // first variant
           } else {
-            // Enter on variant card: go into variant
+            // Enter on variant card: expand it (handled by WorkshopOverlay via onWorkshopSelectVariant)
             const variantIdx = workshopTabIndex - workshopRoleCount;
             onWorkshopSelectVariant(variantIdx);
-            setNavLevel('workshop-variant');
-            setLineIndex(0);
           }
           break;
         }
         case 'p': {
-          // Preview highlighted variant
-          if (workshopTabIndex >= workshopRoleCount) {
+          if (!inRoleTabs) {
             onWorkshopPreviewVariant();
           }
           break;
         }
         case 's': {
-          // Stage highlighted variant directly
-          if (workshopTabIndex >= workshopRoleCount) {
+          if (!inRoleTabs) {
             onWorkshopStageVariant();
             setNavLevel('stage');
           }
@@ -373,6 +380,15 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
           break;
         }
         case 'Escape':
+          if (!inRoleTabs) {
+            // Back to role tabs — go to index 0 (first role tab)
+            setWorkshopTabIndex(0);
+          } else {
+            closeWorkshop();
+            setNavLevel('stage');
+            setWorkshopTabIndex(0);
+          }
+          break;
         case 'w':
           closeWorkshop();
           setNavLevel('stage');

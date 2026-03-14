@@ -1,16 +1,30 @@
 import type { CrateVoice } from '../types';
 import { VOICE_LIBRARY } from './voiceLibrary';
 
-const CRATE_KEY = 'conductor_crate_v2';
+const CRATE_KEY = 'conductor_crate_v5';
 
 const DEFAULT_CRATE_PRESET_IDS = [
-  'kick-sub-weight',
-  'hats-needle-spray',
+  'kick-pressure-floor',
+  'kick-skip-pulse',
+  'hats-clock-drift',
+  'hats-sixteen-rain',
   'snare-back-alley',
-  'bass-acid-root',
-  'pad-neon-fog',
-  'texture-ghost-dust',
-  'lead-acid-line',
+  'snare-shadow-step',
+  'bass-deep-current',
+  'bass-saw-climb',
+  'bass-corner-pressure',
+  'pad-slow-glass',
+  'pad-breath-cycle',
+  'pad-afterimage',
+  'lead-mirror-line',
+  'lead-stab-question',
+  'lead-late-signal',
+  'texture-vinyl-crackle',
+  'texture-vent-hiss',
+  'perc-rim-clock',
+  'perc-trip-wire',
+  'fx-swell-lift',
+  'fx-freeze-flash',
 ];
 
 function presetToCrateVoice(presetId: string, index: number): CrateVoice | null {
