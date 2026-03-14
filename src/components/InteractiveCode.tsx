@@ -1,4 +1,4 @@
-import { memo, type JSX } from 'react';
+import { memo, useMemo, useState, type JSX } from 'react';
 
 interface Props {
   code: string;
@@ -17,6 +17,17 @@ interface SliderInfo {
 }
 
 const SLIDER_RE = /slider\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/g;
+const SOUND_RE = /\.s\(\s*(['"])([^'"]+)\1\s*\)/;
+
+export const SOUND_OPTIONS = [
+  'sine',
+  'triangle',
+  'square',
+  'sawtooth',
+  'supersaw',
+  'white',
+  'pink',
+];
 
 function findSliders(code: string): SliderInfo[] {
   const results: SliderInfo[] = [];
@@ -58,6 +69,10 @@ export function updateSliderInCode(code: string, sliderIndex: number, newValue: 
 
 export function stripSliders(code: string): string {
   return code.replace(/slider\(\s*([\d.]+)\s*,\s*[\d.]+\s*,\s*[\d.]+\s*\)/g, '$1');
+}
+
+export function updateSoundInCode(code: string, nextSound: string): string {
+  return code.replace(SOUND_RE, (_match, quote) => `.s(${quote}${nextSound}${quote})`);
 }
 
 // Syntax highlighting
@@ -131,11 +146,86 @@ const ParamSlider = memo(function ParamSlider({
 // --- Separate exports for split layout ---
 
 /** Renders just the syntax-highlighted code with slider values inlined */
-export function CodeDisplay({ code }: { code: string }) {
+function SoundToken({
+  sound,
+  onChange,
+}: {
+  sound: string;
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const options = useMemo(() => (
+    SOUND_OPTIONS.includes(sound) ? SOUND_OPTIONS : [sound, ...SOUND_OPTIONS]
+  ), [sound]);
+
+  if (open) {
+    return (
+      <select
+        value={sound}
+        autoFocus
+        onBlur={() => setOpen(false)}
+        onChange={(event) => {
+          onChange(event.target.value);
+          setOpen(false);
+        }}
+        onClick={(event) => event.stopPropagation()}
+        className="bg-transparent text-sm outline-none"
+        style={{ color: '#88ff88', border: '1px solid rgba(136,255,136,0.15)' }}
+      >
+        {options.map((option) => (
+          <option key={option} value={option} style={{ background: '#0000cc', color: '#ffffff' }}>
+            {option}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
   return (
-    <pre className="whitespace-pre-wrap m-0 text-sm leading-relaxed">
-      {highlight(stripSliders(code))}
-    </pre>
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        setOpen(true);
+      }}
+      className="cursor-pointer"
+      style={{ color: '#88ff88', borderBottom: '1px dashed rgba(136,255,136,0.35)' }}
+    >
+      {sound}
+    </button>
+  );
+}
+
+export function CodeDisplay({
+  code,
+  onSoundChange,
+}: {
+  code: string;
+  onSoundChange?: (nextSound: string) => void;
+}) {
+  const cleanCode = stripSliders(code);
+  const soundMatch = onSoundChange ? cleanCode.match(SOUND_RE) : null;
+
+  if (soundMatch?.index !== undefined) {
+    const fullMatch = soundMatch[0];
+    const soundValue = soundMatch[2];
+    const soundOffset = fullMatch.indexOf(soundValue);
+    const soundStart = soundMatch.index + soundOffset;
+    const soundEnd = soundStart + soundValue.length;
+    const before = cleanCode.slice(0, soundStart);
+    const after = cleanCode.slice(soundEnd);
+
+    return (
+      <pre className="whitespace-pre-wrap m-0 text-sm leading-relaxed">
+        {highlight(before)}
+        <SoundToken sound={soundValue} onChange={onSoundChange} />
+        {highlight(after)}
+      </pre>
+    );
+  }
+
+  return (
+    <pre className="whitespace-pre-wrap m-0 text-sm leading-relaxed">{highlight(cleanCode)}</pre>
   );
 }
 

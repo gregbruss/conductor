@@ -174,9 +174,9 @@ export const VOICE_LIBRARY: VoicePreset[] = [
   {
     id: 'bass-acid-root',
     name: 'acid root',
-    description: 'Saw bass riff with resonant filter movement and mono focus.',
+    description: 'Saw bass riff with resonant filter movement in C minor.',
     role: 'bass',
-    code: `$: note("<c2 eb2 g1 bb1>*2")
+    code: `$: note("<c2 eb2 g1 bb1>")
 .s("sawtooth")
 .lpf(slider(420, 100, 1800))
 .delay(0.08)

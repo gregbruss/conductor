@@ -1,15 +1,16 @@
 import type { CrateVoice } from '../types';
 import { VOICE_LIBRARY } from './voiceLibrary';
 
-const CRATE_KEY = 'conductor_crate';
+const CRATE_KEY = 'conductor_crate_v2';
 
 const DEFAULT_CRATE_PRESET_IDS = [
   'kick-sub-weight',
-  'hats-air-grid',
-  'bass-foundation-drop',
+  'hats-needle-spray',
+  'snare-back-alley',
+  'bass-acid-root',
   'pad-neon-fog',
   'texture-ghost-dust',
-  'fx-reverse-mirage',
+  'lead-acid-line',
 ];
 
 function presetToCrateVoice(presetId: string, index: number): CrateVoice | null {

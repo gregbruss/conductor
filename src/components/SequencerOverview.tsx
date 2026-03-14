@@ -10,15 +10,25 @@ interface Props {
   isPlaying: boolean;
   bpm: number;
   onFocusLayer: (id: string) => void;
+  onToggleMute: (id: string) => void;
+  onToggleSolo: (id: string) => void;
 }
 
 const COLS = 16;
-const ROW_H = 22;
-const LABEL_W = 130;
+const ROW_H = 28;
+const LABEL_W = 148;
 const GAP = 2;
 
 export default function SequencerOverview({
-  layers, mutedIds, soloId, focusedLayerId, isPlaying, bpm, onFocusLayer,
+  layers,
+  mutedIds,
+  soloId,
+  focusedLayerId,
+  isPlaying,
+  bpm,
+  onFocusLayer,
+  onToggleMute,
+  onToggleSolo,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
@@ -131,7 +141,16 @@ export default function SequencerOverview({
     if (!rect) return;
     const row = Math.floor((e.clientY - rect.top) / ROW_H);
     if (row >= 0 && row < layers.length) {
-      onFocusLayer(layers[row].id);
+      const layerId = layers[row].id;
+      if (e.shiftKey) {
+        onToggleSolo(layerId);
+        return;
+      }
+      if (e.metaKey || e.ctrlKey) {
+        onToggleMute(layerId);
+        return;
+      }
+      onFocusLayer(layerId);
     }
   };
 

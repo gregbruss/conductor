@@ -1,33 +1,22 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CrateVoice, VoiceRole } from '../types';
 import { VOICE_LIBRARY, VOICE_ROLES } from '../lib/voiceLibrary';
+import { createBlankWorkshopVoice } from '../lib/workshopSeeds';
 import { generateRowGrid } from './Punchcard';
+import { CodeDisplay, SliderRow, updateSoundInCode, updateSliderInCode } from './InteractiveCode';
 
 type WorkshopRole = VoiceRole | 'all';
 
-interface WorkshopVoice {
-  id: string;
-  name: string;
-  description: string;
-  role: VoiceRole;
-  code: string;
-  tags: string[];
-}
-
 interface Props {
-  open: boolean;
   role: WorkshopRole;
-  generatedVoices: WorkshopVoice[];
+  seedVoice: CrateVoice | null;
   crate: CrateVoice[];
   previewingId: string | null;
-  isGenerating: boolean;
   onClose: () => void;
-  onChangeRole: (role: WorkshopRole) => void;
-  onGenerate: (role: VoiceRole, prompt: string) => void;
-  onPreview: (voice: WorkshopVoice) => void;
-  onStopPreview: () => void;
-  onSaveToCrate: (voice: WorkshopVoice) => void;
-  onAddToStage: (voice: WorkshopVoice) => void;
+  onChangeRole: (role: VoiceRole) => void;
+  onPreview: (voice: CrateVoice) => void;
+  onSaveToCrate: (voice: CrateVoice) => void;
+  onAddToStage: (voice: CrateVoice) => void;
 }
 
 function PulsePreview({ code }: { code: string }) {
@@ -45,271 +34,362 @@ function PulsePreview({ code }: { code: string }) {
   );
 }
 
-function VoiceCard({
+function dedupeVoices(voices: CrateVoice[]): CrateVoice[] {
+  const seen = new Set<string>();
+  return voices.filter((voice) => {
+    const key = `${voice.role}:${voice.name}:${voice.code}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function shuffle<T>(items: T[], seed: number): T[] {
+  const values = [...items];
+  let cursor = seed || 1;
+  for (let i = values.length - 1; i > 0; i -= 1) {
+    cursor = (cursor * 1664525 + 1013904223) % 4294967296;
+    const j = cursor % (i + 1);
+    [values[i], values[j]] = [values[j], values[i]];
+  }
+  return values;
+}
+
+function CandidateCard({
   voice,
   previewing,
   onPreview,
+  onStage,
+  onSelect,
   onSaveToCrate,
-  onAddToStage,
 }: {
-  voice: WorkshopVoice;
+  voice: CrateVoice;
   previewing: boolean;
   onPreview: () => void;
+  onStage: () => void;
+  onSelect: () => void;
   onSaveToCrate: () => void;
-  onAddToStage: () => void;
 }) {
   return (
-    <div
-      className="p-3"
+    <button
+      type="button"
+      onClick={onSelect}
+      className="text-left p-3 cursor-pointer transition-all"
       style={{
-        border: previewing ? '1px solid rgba(136,255,136,0.22)' : '1px solid rgba(255,255,255,0.06)',
-        background: previewing ? 'rgba(136,255,136,0.04)' : 'rgba(0,0,0,0.18)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        background: 'rgba(255,255,255,0.02)',
       }}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-sm text-white">{voice.name}</div>
-          <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: 'rgba(255,255,255,0.22)' }}>
-            {voice.role}
-          </div>
-        </div>
-        <div className="flex gap-1 flex-wrap justify-end">
-          {voice.tags.slice(0, 3).map((tag) => (
-            <span
-              key={tag}
-              className="text-[9px] px-1.5 py-0.5"
-              style={{ color: 'rgba(255,255,255,0.45)', border: '1px solid rgba(255,255,255,0.06)' }}
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
-        {voice.description}
-      </div>
-
+      <div className="text-sm text-white">{voice.name}</div>
       <div className="mt-3">
         <PulsePreview code={voice.code} />
       </div>
-
-      <pre
-        className="mt-3 text-[11px] leading-relaxed whitespace-pre-wrap"
-        style={{ color: 'rgba(255,255,255,0.7)' }}
-      >
-        {voice.code}
-      </pre>
-
       <div className="mt-3 flex items-center gap-2">
         <button
-          onClick={onPreview}
-          className="px-2.5 py-1 text-[10px] cursor-pointer transition-all"
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onPreview();
+          }}
+          className="px-2.5 py-1 text-[10px] cursor-pointer"
           style={{
-            color: previewing ? '#88ff88' : 'rgba(255,255,255,0.55)',
-            border: `1px solid ${previewing ? 'rgba(136,255,136,0.22)' : 'rgba(255,255,255,0.08)'}`,
+            border: `1px solid ${previewing ? 'rgba(136,255,136,0.18)' : 'rgba(255,255,255,0.08)'}`,
+            color: previewing ? '#88ff88' : '#ffffff',
           }}
         >
-          {previewing ? 'stop preview' : 'preview'}
+          {previewing ? '▶ previewing' : '▶ preview'}
         </button>
         <button
-          onClick={onSaveToCrate}
-          className="px-2.5 py-1 text-[10px] cursor-pointer transition-all"
-          style={{ color: '#88ff88', border: '1px solid rgba(136,255,136,0.15)' }}
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onStage();
+          }}
+          className="px-2.5 py-1 text-[10px] cursor-pointer"
+          style={{ border: '1px solid rgba(136,255,136,0.15)', color: '#88ff88' }}
         >
-          save to crate
+          stage
         </button>
         <button
-          onClick={onAddToStage}
-          className="px-2.5 py-1 text-[10px] cursor-pointer transition-all"
-          style={{ color: '#ffffff', border: '1px solid rgba(255,255,255,0.12)' }}
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onSaveToCrate();
+          }}
+          className="px-2.5 py-1 text-[10px] cursor-pointer"
+          style={{ border: '1px solid rgba(255,255,255,0.08)', color: '#ffffff' }}
         >
-          add to stage
+          + crate
         </button>
       </div>
-    </div>
+    </button>
   );
 }
 
 export default function WorkshopOverlay({
-  open,
   role,
-  generatedVoices,
+  seedVoice,
   crate,
   previewingId,
-  isGenerating,
   onClose,
   onChangeRole,
-  onGenerate,
   onPreview,
-  onStopPreview,
   onSaveToCrate,
   onAddToStage,
 }: Props) {
-  const [prompt, setPrompt] = useState('');
+  const [batch, setBatch] = useState(0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, CrateVoice>>({});
 
-  const libraryVoices = useMemo(() => {
-    if (role === 'all') return VOICE_LIBRARY;
-    return VOICE_LIBRARY.filter((voice) => voice.role === role);
-  }, [role]);
+  const activeRole = role === 'all' ? 'bass' : role;
 
-  const crateVoices = useMemo(() => {
-    if (role === 'all') return crate;
-    return crate.filter((voice) => voice.role === role);
-  }, [crate, role]);
+  const pool = useMemo(() => {
+    const libraryVoices = VOICE_LIBRARY
+      .filter((voice) => voice.role === activeRole)
+      .map((voice) => ({
+        ...voice,
+        savedAt: Date.now(),
+        isFavorite: false,
+      }));
 
-  if (!open) return null;
+    const crateVoices = crate.filter((voice) => voice.role === activeRole);
+    const combined = dedupeVoices([
+      ...(seedVoice && seedVoice.role === activeRole ? [seedVoice] : []),
+      ...crateVoices,
+      ...libraryVoices,
+    ]);
+
+    return shuffle(combined, batch + 1);
+  }, [activeRole, batch, crate, seedVoice]);
+
+  const visibleVoices = useMemo(() => (
+    pool.slice(0, Math.max(4, Math.min(6, pool.length)))
+  ), [pool]);
+
+  useEffect(() => {
+    if (seedVoice && seedVoice.role === activeRole) {
+      const cloned = { ...seedVoice, id: `seed-${Date.now()}`, tags: [...seedVoice.tags] };
+      setDrafts((current) => ({ ...current, [cloned.id]: cloned }));
+      setSelectedId(cloned.id);
+      return;
+    }
+
+    if (visibleVoices.length === 0) {
+      const blank = createBlankWorkshopVoice(activeRole);
+      setDrafts((current) => ({ ...current, [blank.id]: blank }));
+      setSelectedId(blank.id);
+      return;
+    }
+
+    setSelectedId(null);
+  }, [activeRole, seedVoice, visibleVoices]);
+
+  const selectedVoice = useMemo(() => {
+    if (!selectedId) return null;
+    return drafts[selectedId] ?? visibleVoices.find((voice) => voice.id === selectedId) ?? null;
+  }, [drafts, selectedId, visibleVoices]);
+
+  const candidateTabs = selectedVoice
+    ? visibleVoices.map((voice) => drafts[voice.id] ?? voice)
+    : [];
+
+  const selectCandidate = (voice: CrateVoice) => {
+    setDrafts((current) => ({
+      ...current,
+      [voice.id]: current[voice.id] ?? { ...voice, tags: [...voice.tags] },
+    }));
+    setSelectedId(voice.id);
+  };
+
+  const selectedIsEdited = !!(selectedVoice && visibleVoices.find((voice) => voice.id === selectedVoice.id)?.code !== selectedVoice.code);
 
   return (
-    <div
-      className="absolute inset-0 z-50 flex flex-col"
-      style={{ background: 'rgba(0, 0, 140, 0.96)', backdropFilter: 'blur(8px)' }}
-    >
-      <div
-        className="px-5 py-3 flex items-center justify-between shrink-0"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-      >
-        <div>
-          <div className="text-xs tracking-[0.25em]" style={{ color: 'rgba(255,255,255,0.2)' }}>
-            WORKSHOP
-          </div>
-          <div className="text-sm text-white">Stock the crate, then go back to the stage.</div>
-        </div>
+    <div style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)' }}>
+      <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.15)' }}>
+        <div className="text-sm font-bold tracking-[0.18em] text-white">WORKSHOP</div>
         <button
-          onClick={() => { onStopPreview(); onClose(); }}
-          className="px-3 py-1.5 text-[11px] cursor-pointer transition-all"
-          style={{ color: '#ffffff', border: '1px solid rgba(255,255,255,0.12)' }}
+          type="button"
+          onClick={onClose}
+          className="px-3 py-1 text-[11px] cursor-pointer"
+          style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
         >
-          back to stage
+          close
         </button>
       </div>
 
-      <div className="px-5 py-3 shrink-0 flex items-center gap-2 overflow-x-auto"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-        <button
-          onClick={() => onChangeRole('all')}
-          className="px-2.5 py-1 text-[10px] cursor-pointer transition-all"
-          style={{
-            color: role === 'all' ? '#88ff88' : 'rgba(255,255,255,0.35)',
-            border: `1px solid ${role === 'all' ? 'rgba(136,255,136,0.18)' : 'rgba(255,255,255,0.06)'}`,
-          }}
-        >
-          all
-        </button>
-        {VOICE_ROLES.map(({ role: voiceRole, label }) => (
+      <div className="px-4 py-3 flex flex-wrap items-center gap-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+        {VOICE_ROLES.filter(({ role: voiceRole }) => ['kick', 'hats', 'bass', 'pad', 'texture', 'fx'].includes(voiceRole)).map(({ role: voiceRole }) => (
           <button
             key={voiceRole}
+            type="button"
             onClick={() => onChangeRole(voiceRole)}
-            className="px-2.5 py-1 text-[10px] cursor-pointer transition-all"
+            className="px-2.5 py-1 text-[10px] cursor-pointer"
             style={{
-              color: role === voiceRole ? '#88ff88' : 'rgba(255,255,255,0.35)',
-              border: `1px solid ${role === voiceRole ? 'rgba(136,255,136,0.18)' : 'rgba(255,255,255,0.06)'}`,
+              border: `1px solid ${activeRole === voiceRole ? 'rgba(136,255,136,0.18)' : 'rgba(255,255,255,0.06)'}`,
+              color: activeRole === voiceRole ? '#88ff88' : 'rgba(255,255,255,0.35)',
             }}
           >
-            {label.toLowerCase()}
+            {voiceRole}
           </button>
         ))}
       </div>
 
-      <div
-        className="px-5 py-4 shrink-0"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-      >
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (role === 'all' || !prompt.trim() || isGenerating) return;
-            onGenerate(role, prompt.trim());
-            setPrompt('');
-          }}
-          className="flex items-center gap-3"
-        >
-          <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: 'rgba(255,255,255,0.25)' }}>
-            forge
-          </span>
-          <input
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            placeholder={role === 'all'
-              ? 'pick a role to generate a voice'
-              : `generate a ${role} for the crate...`}
-            disabled={isGenerating || role === 'all'}
-            className="flex-1 bg-transparent border-none outline-none text-sm text-white placeholder-[#7a7ab8]"
-          />
-          <button
-            type="submit"
-            disabled={isGenerating || role === 'all' || !prompt.trim()}
-            className="px-3 py-1.5 text-[11px] cursor-pointer transition-all disabled:opacity-30"
-            style={{ color: '#88ff88', border: '1px solid rgba(136,255,136,0.18)' }}
-          >
-            {isGenerating ? 'generating...' : 'generate'}
-          </button>
-        </form>
-      </div>
-
-      <div className="flex-1 overflow-auto px-5 py-5 space-y-8">
-        {generatedVoices.length > 0 && (
-          <section>
-            <div className="mb-3 text-[10px] uppercase tracking-[0.2em]" style={{ color: 'rgba(255,255,255,0.22)' }}>
-              generated
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              {generatedVoices.map((voice) => (
-                <VoiceCard
-                  key={voice.id}
-                  voice={voice}
-                  previewing={previewingId === voice.id}
-                  onPreview={() => onPreview(voice)}
-                  onSaveToCrate={() => onSaveToCrate(voice)}
-                  onAddToStage={() => onAddToStage(voice)}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        <section>
-          <div className="mb-3 text-[10px] uppercase tracking-[0.2em]" style={{ color: 'rgba(255,255,255,0.22)' }}>
-            crate
-          </div>
-          {crateVoices.length > 0 ? (
-            <div className="grid grid-cols-2 gap-4">
-              {crateVoices.map((voice) => (
-                <VoiceCard
-                  key={voice.id}
-                  voice={voice}
-                  previewing={previewingId === voice.id}
-                  onPreview={() => onPreview(voice)}
-                  onSaveToCrate={() => onSaveToCrate(voice)}
-                  onAddToStage={() => onAddToStage(voice)}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="text-sm" style={{ color: 'rgba(255,255,255,0.35)' }}>
-              No saved crate voices for this role yet.
-            </div>
-          )}
-        </section>
-
-        <section>
-          <div className="mb-3 text-[10px] uppercase tracking-[0.2em]" style={{ color: 'rgba(255,255,255,0.22)' }}>
-            library
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            {libraryVoices.map((voice) => (
-              <VoiceCard
+      {!selectedVoice ? (
+        <div className="p-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {visibleVoices.map((voice) => (
+              <CandidateCard
                 key={voice.id}
                 voice={voice}
                 previewing={previewingId === voice.id}
                 onPreview={() => onPreview(voice)}
+                onStage={() => onAddToStage(voice)}
+                onSelect={() => selectCandidate(voice)}
                 onSaveToCrate={() => onSaveToCrate(voice)}
-                onAddToStage={() => onAddToStage(voice)}
               />
             ))}
           </div>
-        </section>
-      </div>
+          <div className="mt-4 flex items-center justify-center">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedId(null);
+                setBatch((value) => value + 1);
+              }}
+              className="px-4 py-2 text-[11px] cursor-pointer"
+              style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
+            >
+              ↻ more
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="p-4 space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {candidateTabs.map((voice) => {
+              const active = voice.id === selectedVoice.id;
+              return (
+                <button
+                  key={voice.id}
+                  type="button"
+                  onClick={() => selectCandidate(voice)}
+                  className="px-2.5 py-1 text-[10px] cursor-pointer"
+                  style={{
+                    border: `1px solid ${active ? 'rgba(136,255,136,0.18)' : 'rgba(255,255,255,0.06)'}`,
+                    color: active ? '#88ff88' : 'rgba(255,255,255,0.45)',
+                  }}
+                >
+                  {voice.name}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="p-4" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
+            <div className="flex items-center justify-between gap-4">
+              <div className="text-sm text-white">
+                {selectedVoice.name}{selectedIsEdited ? ' (edited)' : ''}
+              </div>
+              <button
+                type="button"
+                onClick={() => onPreview(selectedVoice)}
+                className="px-3 py-1 text-[10px] cursor-pointer"
+                style={{
+                  border: `1px solid ${previewingId === selectedVoice.id ? 'rgba(136,255,136,0.18)' : 'rgba(255,255,255,0.08)'}`,
+                  color: previewingId === selectedVoice.id ? '#88ff88' : '#ffffff',
+                }}
+              >
+                {previewingId === selectedVoice.id ? '▶ previewing' : '▶ preview'}
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <div
+                className="p-3"
+                style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+              >
+                <CodeDisplay
+                  code={selectedVoice.code}
+                  onSoundChange={(nextSound) => {
+                    setDrafts((current) => ({
+                      ...current,
+                      [selectedVoice.id]: {
+                        ...selectedVoice,
+                        code: updateSoundInCode(selectedVoice.code, nextSound),
+                      },
+                    }));
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <textarea
+                value={selectedVoice.code}
+                onChange={(event) => {
+                  const nextCode = event.target.value;
+                  setDrafts((current) => ({
+                    ...current,
+                    [selectedVoice.id]: {
+                      ...selectedVoice,
+                      code: nextCode,
+                    },
+                  }));
+                }}
+                className="w-full min-h-[150px] resize-y bg-transparent outline-none text-sm leading-relaxed"
+                style={{ border: '1px solid rgba(255,255,255,0.08)', color: '#ffffff', padding: '10px 12px' }}
+                spellCheck={false}
+              />
+            </div>
+
+            <div className="mt-4">
+              <PulsePreview code={selectedVoice.code} />
+            </div>
+
+            <div className="mt-4">
+              <SliderRow
+                code={selectedVoice.code}
+                onSliderChange={(sliderIndex, value) => {
+                  setDrafts((current) => ({
+                    ...current,
+                    [selectedVoice.id]: {
+                      ...selectedVoice,
+                      code: updateSliderInCode(selectedVoice.code, sliderIndex, value),
+                    },
+                  }));
+                }}
+              />
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setBatch((value) => value + 1)}
+                className="px-3 py-1.5 text-[10px] cursor-pointer"
+                style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
+              >
+                ↻ more
+              </button>
+              <button
+                type="button"
+                onClick={() => onSaveToCrate(selectedVoice)}
+                className="px-3 py-1.5 text-[10px] cursor-pointer"
+                style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
+              >
+                + crate
+              </button>
+              <button
+                type="button"
+                onClick={() => onAddToStage(selectedVoice)}
+                className="px-3 py-1.5 text-[10px] cursor-pointer"
+                style={{ border: '1px solid rgba(136,255,136,0.15)', color: '#88ff88' }}
+              >
+                stage this →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

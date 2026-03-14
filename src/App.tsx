@@ -1,12 +1,13 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
-import InteractiveCode, { updateSliderInCode, stripSliders, countSliders } from './components/InteractiveCode';
+import { countSliders, SliderRow, stripSliders, updateSliderInCode, updateSoundInCode } from './components/InteractiveCode';
 import LayerCard from './components/LayerCard';
 import SequencerOverview from './components/SequencerOverview';
 import SetDock from './components/SetDock';
 import LandingPage from './components/LandingPage';
 import WorkshopOverlay from './components/WorkshopOverlay';
 import { parseLayers, reconstructCode } from './lib/parser';
-import { loadCrate, saveCrate, createCrateVoice } from './lib/crateStore';
+import { createCrateVoice, loadCrate, saveCrate } from './lib/crateStore';
+import { useTreeNav } from './hooks/useTreeNav';
 import type { CrateVoice, VoiceRole } from './types';
 
 declare global {
@@ -19,51 +20,7 @@ declare global {
 }
 
 type AppView = 'landing' | 'perform';
-type CrateRole = VoiceRole | 'all';
-
-const WORKSHOP_SEEDS: Record<VoiceRole, string> = {
-  kick: `// kick seed
-$: s("bd*4")
-.gain(slider(1.0, 0, 1.5))
-.lpf(slider(200, 60, 500))`,
-  hats: `// hats seed
-$: s("hh*16")
-.gain(slider(0.5, 0, 1.5))
-.hpf(slider(6000, 1500, 12000))`,
-  snare: `// snare seed
-$: s("[~ sd] [~ sd]")
-.gain(slider(0.9, 0, 1.5))
-.room(slider(0.2, 0, 1))`,
-  bass: `// bass seed
-$: note("<c2 eb2>")
-.s("sawtooth")
-.gain(slider(0.8, 0, 1.5))
-.lpf(slider(400, 100, 1600))`,
-  pad: `// pad seed
-$: note("<c4 eb4 g4 bb4>")
-.s("supersaw")
-.gain(slider(0.5, 0, 1.5))
-.room(slider(0.4, 0, 1))`,
-  lead: `// lead seed
-$: note("<c5 eb5 g5>")
-.s("square")
-.gain(slider(0.7, 0, 1.5))
-.delay(slider(0.15, 0, 0.8))`,
-  texture: `// texture seed
-$: s("<hh ~ rim ~>")
-.gain(slider(0.4, 0, 1.5))
-.room(slider(0.35, 0, 1))
-.hpf(slider(4200, 800, 12000))`,
-  perc: `// percussion seed
-$: s("<rim cp rim ~>")
-.gain(slider(0.7, 0, 1.5))
-.hpf(slider(1800, 400, 6000))`,
-  fx: `// fx seed
-$: s("<cr ~ ~ ~>")
-.gain(slider(0.6, 0, 1.5))
-.delay(slider(0.3, 0, 1))
-.room(slider(0.4, 0, 1))`,
-};
+type SavedTake = { title: string; duration: string };
 
 function extractBpm(code: string): number {
   const match = code.match(/setCps\((?:slider\()?([\d.]+)/);
@@ -78,7 +35,7 @@ function guessRole(label: string, code = ''): VoiceRole | null {
   if (haystack.includes('bass') || haystack.includes('sub')) return 'bass';
   if (haystack.includes('pad') || haystack.includes('chord') || haystack.includes('supersaw')) return 'pad';
   if (haystack.includes('lead') || haystack.includes('melody')) return 'lead';
-  if (haystack.includes('texture') || haystack.includes('dust') || haystack.includes('noise') || haystack.includes('air')) return 'texture';
+  if (haystack.includes('texture') || haystack.includes('noise') || haystack.includes('dust')) return 'texture';
   if (haystack.includes('perc') || haystack.includes('rim') || haystack.includes('tom')) return 'perc';
   if (haystack.includes('fx') || haystack.includes('cr') || haystack.includes('impact')) return 'fx';
   return null;
@@ -89,23 +46,84 @@ function buildBaseCodeForNewVoice(currentCode: string, bpm: number): string {
   return `setCps(${Math.round(bpm)}/60/4)`;
 }
 
+function formatDuration(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function CompactStageLane({
+  index,
+  code,
+  sliderOffset,
+  label,
+  muted,
+  onToggleMute,
+  onToggleSolo,
+  isSoloed,
+  onSliderChange,
+}: {
+  index: number;
+  code: string;
+  sliderOffset: number;
+  label: string;
+  muted: boolean;
+  onToggleMute: () => void;
+  onToggleSolo: () => void;
+  isSoloed: boolean;
+  onSliderChange: (globalIndex: number, value: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+      <span className="w-4 text-[10px]" style={{ color: 'rgba(255,255,255,0.25)' }}>{index + 1}</span>
+      <span className="text-[12px]" style={{ color: '#ffffff' }}>{label}</span>
+      {!muted && (
+        <div className="min-w-[110px]" onClick={(event) => event.stopPropagation()}>
+          <SliderRow
+            code={code}
+            onSliderChange={onSliderChange}
+            sliderOffset={sliderOffset}
+            limit={1}
+          />
+        </div>
+      )}
+      <div className="flex-1" />
+      {muted && <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>MUTED</span>}
+      <button
+        type="button"
+        onClick={onToggleMute}
+        className="text-[10px] cursor-pointer"
+        style={{ color: muted ? '#ff9d84' : 'rgba(255,255,255,0.35)' }}
+      >
+        [m]
+      </button>
+      <button
+        type="button"
+        onClick={onToggleSolo}
+        className="text-[10px] cursor-pointer"
+        style={{ color: isSoloed ? '#88ff88' : 'rgba(255,255,255,0.35)' }}
+      >
+        [s]
+      </button>
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState<AppView>('landing');
   const [code, setCode] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [savedTake, setSavedTake] = useState<SavedTake | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<string[]>([]);
   const [mutedIds, setMutedIds] = useState<Set<string>>(new Set());
   const [soloId, setSoloId] = useState<string | null>(null);
-  const [focusedLayerId, setFocusedLayerId] = useState<string | null>(null);
   const [crate, setCrate] = useState<CrateVoice[]>(() => loadCrate());
-  const [crateRole, setCrateRole] = useState<CrateRole>('all');
-  const [workshopOpen, setWorkshopOpen] = useState(false);
-  const [workshopRole, setWorkshopRole] = useState<CrateRole>('all');
-  const [generatedVoices, setGeneratedVoices] = useState<CrateVoice[]>([]);
-  const [previewVoiceId, setPreviewVoiceId] = useState<string | null>(null);
-  const [phraseCount, setPhraseCount] = useState(0);
+  const [workshopRole, setWorkshopRole] = useState<VoiceRole>('bass');
+  const [workshopSeedVoice, setWorkshopSeedVoice] = useState<CrateVoice | null>(null);
+  const [previewVoice, setPreviewVoice] = useState<CrateVoice | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const strudelReady = useRef(false);
@@ -129,14 +147,21 @@ export default function App() {
     return () => clearTimeout(timeout);
   }, [statusMessage]);
 
+  useEffect(() => {
+    if (!isRecording) {
+      setRecordSeconds(0);
+      return undefined;
+    }
+    const interval = setInterval(() => setRecordSeconds((value) => value + 1), 1000);
+    return () => clearInterval(interval);
+  }, [isRecording]);
+
   const { preamble, layers } = useMemo(() => {
     if (!code) return { preamble: '', layers: [] };
     return parseLayers(code);
   }, [code]);
 
   const bpm = extractBpm(code || 'setCps(120/60/4)');
-  const focusedLayer = layers.find((layer) => layer.id === focusedLayerId) || null;
-  const focusedRole = focusedLayer ? guessRole(focusedLayer.label, focusedLayer.code) : null;
 
   const layerOffsets = useMemo(() => {
     let offset = countSliders(preamble);
@@ -146,16 +171,6 @@ export default function App() {
       return currentOffset;
     });
   }, [layers, preamble]);
-
-  useEffect(() => {
-    if (!isPlaying) {
-      setPhraseCount(0);
-      return undefined;
-    }
-    const barMs = (60 / bpm) * 4 * 1000;
-    const interval = setInterval(() => setPhraseCount((value) => value + 1), barMs);
-    return () => clearInterval(interval);
-  }, [bpm, isPlaying]);
 
   const ensureStrudel = async () => {
     if (strudelReady.current) return;
@@ -206,7 +221,7 @@ export default function App() {
         window.hush();
       } catch {}
     }
-    setPreviewVoiceId(null);
+    setPreviewVoice(null);
   }, [code]);
 
   const handleSliderChange = useCallback((globalIndex: number, value: number) => {
@@ -227,159 +242,112 @@ export default function App() {
     }, 50);
   }, []);
 
-  const replaceWholeCode = async (nextCode: string) => {
-    setCode(nextCode);
-    setMutedIds(new Set());
-    setSoloId(null);
-    if (isPlayingRef.current) {
-      await evalStrudel(nextCode, new Set(), null);
-    }
-  };
-
   const toggleMute = (layerId: string) => {
     const nextMutedIds = new Set(mutedIds);
     if (nextMutedIds.has(layerId)) nextMutedIds.delete(layerId);
     else nextMutedIds.add(layerId);
     setMutedIds(nextMutedIds);
-    if (isPlaying) {
-      try {
-        window.evaluate(buildEvalCode(code, nextMutedIds, soloId));
-      } catch {}
+    if (isPlayingRef.current && code) {
+      void evalStrudel(code, nextMutedIds, soloId);
     }
   };
 
   const toggleSolo = (layerId: string) => {
     const nextSoloId = soloId === layerId ? null : layerId;
     setSoloId(nextSoloId);
-    if (isPlaying) {
-      try {
-        window.evaluate(buildEvalCode(code, mutedIds, nextSoloId));
-      } catch {}
+    if (isPlayingRef.current && code) {
+      void evalStrudel(code, mutedIds, nextSoloId);
     }
-  };
-
-  const callApi = async (
-    currentCode: string,
-    direction: string,
-    isRetry = false,
-    retryError = '',
-  ): Promise<string | null> => {
-    try {
-      const response = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentCode, direction, isRetry, retryError }),
-      });
-      if (!response.ok) throw new Error('API error');
-      const payload = await response.json();
-      return payload.code;
-    } catch {
-      return null;
-    }
-  };
-
-  const createWorkshopVoice = (rawCode: string, fallbackRole: VoiceRole, prompt: string): CrateVoice | null => {
-    const parsed = parseLayers(rawCode);
-    const firstLayer = parsed.layers[0];
-    if (!firstLayer) return null;
-    const role = guessRole(firstLayer.label, firstLayer.code) || fallbackRole;
-    return createCrateVoice({
-      name: firstLayer.label,
-      description: prompt || `Generated ${role} voice`,
-      role,
-      code: firstLayer.code,
-      tags: [role, 'generated'],
-    });
-  };
-
-  const handleGenerateWorkshopVoice = async (role: VoiceRole, prompt: string) => {
-    setIsGenerating(true);
-    const seedCode = `setCps(${Math.round(bpm)}/60/4)\n\n${WORKSHOP_SEEDS[role]}`;
-    const direction = [
-      `Create a single ${role} voice for Conductor's crate.`,
-      prompt,
-      'Return one labeled layer only.',
-      'Keep it performance-ready and use slider() for tweakable parameters.',
-      'Do not include multiple voices.',
-    ].join(' ');
-
-    const generatedCode = await callApi(seedCode, direction);
-    if (generatedCode) {
-      const candidate = createWorkshopVoice(generatedCode, role, prompt);
-      if (candidate) {
-        setGeneratedVoices((previous) => [candidate, ...previous]);
-        setStatusMessage(`Generated ${candidate.name}`);
-      }
-    }
-    setIsGenerating(false);
   };
 
   const appendVoiceToStage = async (voiceCode: string, label: string) => {
-    if (previewVoiceId) await restoreStageAudio();
+    if (previewVoice) await restoreStageAudio();
+    setSavedTake(null);
     const base = buildBaseCodeForNewVoice(code, bpm);
     const nextCode = `${base}\n\n// ${label}\n${voiceCode}`;
     if (code) setHistory((previous) => [...previous, code]);
     setCode(nextCode);
     const nextLayers = parseLayers(nextCode).layers;
-    setFocusedLayerId(nextLayers[nextLayers.length - 1]?.id ?? null);
+    const nextId = nextLayers[nextLayers.length - 1]?.id ?? null;
+    setSelectedLayerId(nextId);
     if (!isPlayingRef.current) {
       const ok = await evalStrudel(nextCode, new Set(), null);
       if (ok) setIsPlaying(true);
     } else {
       await evalStrudel(nextCode, mutedIds, soloId);
     }
+    setStatusMessage(`${label} staged`);
   };
 
   const updateLayerCode = async (layerId: string, nextLayerCode: string) => {
     const parsed = parseLayers(code);
     const nextLayers = parsed.layers.map((layer) => (
-      layer.id === layerId
-        ? { ...layer, code: nextLayerCode }
-        : layer
+      layer.id === layerId ? { ...layer, code: nextLayerCode } : layer
     ));
     const nextCode = reconstructCode(parsed.preamble, nextLayers, null);
-    setHistory((previous) => [...previous, code]);
     setCode(nextCode);
     if (isPlayingRef.current) await evalStrudel(nextCode, mutedIds, soloId);
   };
 
-  const duplicateLayer = async (layerId: string) => {
+  const updateLayerSound = async (layerId: string, nextSound: string) => {
+    const targetLayer = layers.find((layer) => layer.id === layerId);
+    if (!targetLayer) return;
+    await updateLayerCode(layerId, updateSoundInCode(targetLayer.code, nextSound));
+  };
+
+  const removeLayer = async (layerId: string) => {
     const parsed = parseLayers(code);
-    const sourceIndex = parsed.layers.findIndex((layer) => layer.id === layerId);
-    if (sourceIndex === -1) return;
-    const sourceLayer = parsed.layers[sourceIndex];
-    const duplicated = {
-      ...sourceLayer,
-      label: `${sourceLayer.label} copy`,
-    };
-    const nextLayers = [...parsed.layers];
-    nextLayers.splice(sourceIndex + 1, 0, duplicated);
+    const nextLayers = parsed.layers.filter((layer) => layer.id !== layerId);
     const nextCode = reconstructCode(parsed.preamble, nextLayers, null);
     setHistory((previous) => [...previous, code]);
     setCode(nextCode);
-    const reparsed = parseLayers(nextCode).layers;
-    setFocusedLayerId(reparsed[sourceIndex + 1]?.id ?? null);
-    if (isPlayingRef.current) await evalStrudel(nextCode, mutedIds, soloId);
+    setSelectedLayerId((current) => (current === layerId ? null : current));
+    const nextMutedIds = new Set(mutedIds);
+    nextMutedIds.delete(layerId);
+    setMutedIds(nextMutedIds);
+    const nextSoloId = soloId === layerId ? null : soloId;
+    setSoloId(nextSoloId);
+    if (isPlayingRef.current) {
+      if (nextCode.trim()) await evalStrudel(nextCode, nextMutedIds, nextSoloId);
+      else {
+        try {
+          window.hush();
+        } catch {}
+        setIsPlaying(false);
+      }
+    }
   };
 
-  const saveLayerToCrate = (layerId: string) => {
-    const targetLayer = layers.find((layer) => layer.id === layerId);
-    if (!targetLayer) return;
-    const role = guessRole(targetLayer.label, targetLayer.code) || 'texture';
-    const exists = crate.some((voice) => voice.name === targetLayer.label && voice.code === targetLayer.code);
-    if (exists) {
-      setStatusMessage(`${targetLayer.label} is already in the crate`);
+  const openWorkshop = (role?: VoiceRole, seedVoice?: CrateVoice | null) => {
+    setSavedTake(null);
+    const selectedLayer = layers.find((layer) => layer.id === selectedLayerId);
+    const inferredRole = guessRole(selectedLayer?.label || '', selectedLayer?.code || '') || 'bass';
+    setWorkshopRole(role ?? inferredRole);
+    if (seedVoice) {
+      setWorkshopSeedVoice(seedVoice);
+    } else if (selectedLayer) {
+      setWorkshopSeedVoice(createCrateVoice({
+        name: selectedLayer.label,
+        description: 'Shaping from stage',
+        role: inferredRole,
+        code: selectedLayer.code,
+        tags: [inferredRole, 'stage'],
+      }));
+    } else {
+      setWorkshopSeedVoice(null);
+    }
+    setWorkshopOpen(true);
+  };
+
+  const previewWorkshopVoice = async (voice: CrateVoice) => {
+    if (previewVoice && previewVoice.id === voice.id && previewVoice.code === voice.code) {
+      await restoreStageAudio();
       return;
     }
-    const nextVoice = createCrateVoice({
-      name: targetLayer.label,
-      description: 'Saved from stage',
-      role,
-      code: targetLayer.code,
-      tags: [role, 'stage'],
-    });
-    setCrate((previous) => [...previous, nextVoice]);
-    setStatusMessage(`Saved ${targetLayer.label} to the crate`);
+    const previewBase = code.trim() ? code : buildBaseCodeForNewVoice('', bpm);
+    const previewCode = `${previewBase}\n\n// ${voice.name}\n${voice.code}`;
+    const ok = await evalStrudel(previewCode, mutedIds, soloId);
+    if (ok) setPreviewVoice(voice);
   };
 
   const saveWorkshopVoiceToCrate = (voice: CrateVoice) => {
@@ -399,35 +367,6 @@ export default function App() {
     setStatusMessage(`Saved ${voice.name} to the crate`);
   };
 
-  const removeLayer = async (layerId: string) => {
-    const parsed = parseLayers(code);
-    const nextLayers = parsed.layers.filter((layer) => layer.id !== layerId);
-    const nextCode = reconstructCode(parsed.preamble, nextLayers, null);
-    setHistory((previous) => [...previous, code]);
-    setCode(nextCode);
-    setFocusedLayerId((current) => (current === layerId ? null : current));
-    const nextMutedIds = new Set(mutedIds);
-    nextMutedIds.delete(layerId);
-    setMutedIds(nextMutedIds);
-    const nextSoloId = soloId === layerId ? null : soloId;
-    setSoloId(nextSoloId);
-    if (isPlayingRef.current) {
-      if (nextCode.trim()) await evalStrudel(nextCode, nextMutedIds, nextSoloId);
-      else handleStop();
-    }
-  };
-
-  const previewWorkshopVoice = async (voice: CrateVoice) => {
-    if (previewVoiceId === voice.id) {
-      await restoreStageAudio();
-      return;
-    }
-    const previewBase = code.trim() ? code : buildBaseCodeForNewVoice('', bpm);
-    const previewCode = `${previewBase}\n\n// ${voice.name}\n${voice.code}`;
-    const ok = await evalStrudel(previewCode, mutedIds, soloId);
-    if (ok) setPreviewVoiceId(voice.id);
-  };
-
   const handlePlay = async () => {
     if (!code) return;
     const ok = await evalStrudel(code);
@@ -439,58 +378,106 @@ export default function App() {
       window.hush();
     } catch {}
     setIsPlaying(false);
-    setPreviewVoiceId(null);
+    setPreviewVoice(null);
   };
 
-  const handleUndo = async () => {
-    if (history.length === 0) return;
-    const previousCode = history[history.length - 1];
-    setHistory((previous) => previous.slice(0, -1));
+  const handleRecordToggle = async () => {
+    if (!isRecording) {
+      if (!code) return;
+      if (!isPlayingRef.current) {
+        const ok = await evalStrudel(code);
+        if (ok) setIsPlaying(true);
+      }
+      setSavedTake(null);
+      setIsRecording(true);
+      return;
+    }
+
+    setIsRecording(false);
+    handleStop();
+    setSavedTake({
+      title: `live take ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+      duration: formatDuration(recordSeconds),
+    });
     setMutedIds(new Set());
     setSoloId(null);
-    setFocusedLayerId(null);
-    await replaceWholeCode(previousCode);
+    setSelectedLayerId(null);
+    setWorkshopOpen(false);
+    setCode('');
   };
 
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
-
-      switch (event.key) {
-        case 'm':
-          if (focusedLayerId) toggleMute(focusedLayerId);
-          break;
-        case 's':
-          if (focusedLayerId) toggleSolo(focusedLayerId);
-          break;
-        case 'Escape':
-          if (workshopOpen) {
-            restoreStageAudio().then(() => setWorkshopOpen(false));
-          } else {
-            setFocusedLayerId(null);
-          }
-          break;
-        case ' ':
-          event.preventDefault();
-          if (isPlaying) handleStop();
-          else handlePlay();
-          break;
-        default:
-          if (/^[1-9]$/.test(event.key)) {
-            const index = parseInt(event.key, 10) - 1;
-            if (index < layers.length) {
-              const targetId = layers[index].id;
-              setFocusedLayerId((current) => (current === targetId ? null : targetId));
-            }
-          }
-      }
-    };
-
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [focusedLayerId, isPlaying, layers, restoreStageAudio, workshopOpen]);
+  const handleStartNewSet = () => {
+    setSavedTake(null);
+    setMutedIds(new Set());
+    setSoloId(null);
+    setSelectedLayerId(null);
+    setWorkshopOpen(false);
+    setWorkshopSeedVoice(null);
+    setPreviewVoice(null);
+    setCode('');
+  };
 
   const hasCode = !!code;
+  const stagedVoiceNames = useMemo(() => new Set(layers.map((layer) => layer.label)), [layers]);
+
+  const nav = useTreeNav({
+    layers,
+    crate,
+    stagedVoiceNames,
+    workshopVisibleCount: 5,
+    workshopRoleCount: 6,
+    toggleMute,
+    toggleSolo,
+    removeLayer,
+    appendVoiceToStage,
+    updateLayerCode,
+    handlePlay,
+    handleStop,
+    handleRecordToggle: () => handleRecordToggle(),
+    undo: () => {
+      if (history.length === 0) return;
+      const previous = history[history.length - 1];
+      setHistory((h) => h.slice(0, -1));
+      setCode(previous);
+      if (isPlayingRef.current && previous.trim()) {
+        void evalStrudel(previous, mutedIds, soloId);
+      } else if (!previous.trim()) {
+        try { window.hush(); } catch {}
+        setIsPlaying(false);
+      }
+      setStatusMessage('undo');
+    },
+    openWorkshop: () => {
+      setSavedTake(null);
+      const selectedLayer = layers.find((layer) => layer.id === nav.selectedLayerId);
+      const inferredRole = guessRole(selectedLayer?.label || '', selectedLayer?.code || '') || 'bass';
+      setWorkshopRole(inferredRole);
+      if (selectedLayer) {
+        setWorkshopSeedVoice(createCrateVoice({
+          name: selectedLayer.label,
+          description: 'Shaping from stage',
+          role: inferredRole,
+          code: selectedLayer.code,
+          tags: [inferredRole, 'stage'],
+        }));
+      } else {
+        setWorkshopSeedVoice(null);
+      }
+    },
+    closeWorkshop: () => {
+      setWorkshopSeedVoice(null);
+      void restoreStageAudio();
+    },
+    onWorkshopChangeRole: (roleIndex) => {
+      const roles: VoiceRole[] = ['kick', 'hats', 'bass', 'pad', 'texture', 'fx'];
+      if (roleIndex < roles.length) setWorkshopRole(roles[roleIndex]);
+    },
+    onWorkshopSelectVariant: () => {},
+    onWorkshopStageVariant: () => {},
+    onWorkshopPreviewVariant: () => {},
+    isPlaying,
+  });
+
 
   if (view === 'landing') {
     return <LandingPage onEnter={() => setView('perform')} />;
@@ -498,124 +485,155 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col select-none overflow-hidden" style={{ background: '#0000cc' }}>
-      <div
-        className="px-4 py-2 flex items-center justify-between shrink-0"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-      >
-        <div className="flex items-center gap-4">
-          <span className="font-bold tracking-widest text-xs">{'\u25C9'} CONDUCTOR</span>
-          {hasCode && (
-            <>
-              <button
-                onClick={isPlaying ? handleStop : handlePlay}
-                className="text-[11px] px-2.5 py-1 cursor-pointer transition-all"
-                style={{
-                  color: isPlaying ? '#ffffff' : 'rgba(255,255,255,0.55)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  background: isPlaying ? 'rgba(255,255,255,0.06)' : 'transparent',
-                }}
-              >
-                {isPlaying ? '\u25A0 stop' : '\u25B6 play'}
-              </button>
-              <button
-                className="text-[11px] px-2.5 py-1 transition-all cursor-not-allowed"
-                style={{ color: 'rgba(255,255,255,0.22)', border: '1px solid rgba(255,255,255,0.06)' }}
-                title="Audio take capture is not implemented yet."
-              >
-                rec soon
-              </button>
-              <button
-                onClick={handleUndo}
-                disabled={history.length === 0}
-                className="text-[10px] cursor-pointer transition-colors disabled:opacity-10"
-                style={{ color: 'rgba(255,255,255,0.25)' }}
-              >
-                {'\u21BA'}
-              </button>
-            </>
-          )}
-        </div>
+      <div className="px-4 py-3 shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.25)' }}>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-bold tracking-[0.22em] text-white">CONDUCTOR</span>
+            {statusMessage && <span className="text-[10px]" style={{ color: '#88ff88' }}>{statusMessage}</span>}
+            {error && <span className="text-[10px]" style={{ color: '#ff9d84' }}>{error}</span>}
+          </div>
 
-        <div className="flex items-center gap-4 text-[10px]">
-          {statusMessage && (
-            <span style={{ color: '#88ff88' }}>{statusMessage}</span>
-          )}
-          {error && (
-            <span className="text-[#ff8888] truncate max-w-52">// {error}</span>
-          )}
-          {hasCode && (
-            <>
-              <span style={{ color: 'rgba(255,255,255,0.18)' }}>phrase: {String(phraseCount).padStart(2, '0')}</span>
-              <span style={{ color: 'rgba(255,255,255,0.18)' }}>{bpm} bpm</span>
-              {isPlaying && (
-                <span className="tracking-wider" style={{ color: '#88ff88' }}>
-                  {'\u25CF'} live
-                </span>
-              )}
-            </>
-          )}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={isPlaying ? handleStop : () => void handlePlay()}
+              className="px-3 py-1.5 text-[11px] cursor-pointer"
+              style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
+            >
+              {isPlaying ? '▶▶' : '▶'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleRecordToggle()}
+              className="px-3 py-1.5 text-[11px] cursor-pointer"
+              style={{
+                border: '1px solid rgba(255,255,255,0.12)',
+                color: isRecording ? '#ff9d84' : '#ffffff',
+              }}
+            >
+              {isRecording ? '■ stop' : '● rec'}
+            </button>
+          </div>
         </div>
+        {isRecording && (
+          <div className="mt-2 text-[10px]" style={{ color: '#ff9d84' }}>
+            ● {formatDuration(recordSeconds)} REC
+          </div>
+        )}
       </div>
 
-      {hasCode && (
-        <div>
-          <div className="px-4 py-1 text-[9px] uppercase tracking-[0.15em]" style={{ color: 'rgba(255,255,255,0.12)' }}>
-            score overview
-          </div>
+      <div className="shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.15)' }}>
+        <div className="px-4 py-2 text-[10px] uppercase tracking-[0.2em]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          score
+        </div>
+        {layers.length > 0 ? (
           <SequencerOverview
             layers={layers}
             mutedIds={mutedIds}
             soloId={soloId}
-            focusedLayerId={focusedLayerId}
+            focusedLayerId={selectedLayerId}
             isPlaying={isPlaying}
             bpm={bpm}
-            onFocusLayer={(id) => setFocusedLayerId((current) => (current === id ? null : id))}
+            onFocusLayer={(id) => setSelectedLayerId((current) => (current === id ? null : id))}
+            onToggleMute={toggleMute}
+            onToggleSolo={toggleSolo}
           />
-        </div>
-      )}
+        ) : (
+          <div className="px-4 pb-3 text-[12px]" style={{ color: 'rgba(255,255,255,0.32)' }}>
+            {savedTake ? '— take complete —' : '— no active voices —'}
+          </div>
+        )}
+      </div>
 
-      <div className="flex-1 overflow-auto min-h-0">
-        {!hasCode ? (
+      <div className="flex-1 overflow-auto min-h-0" style={{ background: 'rgba(0,0,0,0.08)' }}>
+        {savedTake ? (
+          <div className="h-full flex items-center justify-center px-4 py-8">
+            <div className="w-full max-w-xl p-6" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
+              <div className="text-lg text-white">TAKE SAVED</div>
+              <div className="mt-6 text-base text-white">{savedTake.title}</div>
+              <div className="mt-2 text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>duration: {savedTake.duration}</div>
+              <div className="mt-6 flex gap-2">
+                <button
+                  type="button"
+                  disabled
+                  className="px-3 py-1.5 text-[11px]"
+                  style={{ border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.35)' }}
+                  title="Audio take playback comes later."
+                >
+                  ▶ play back
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartNewSet}
+                  className="px-3 py-1.5 text-[11px] cursor-pointer"
+                  style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
+                >
+                  start new set
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : workshopOpen ? (
+          <div
+            className="py-3"
+            style={{ animation: 'workshopSlideIn 0.25s ease-out' }}
+          >
+            <style>{`
+              @keyframes workshopSlideIn {
+                from { opacity: 0; transform: translateY(24px); }
+                to { opacity: 1; transform: translateY(0); }
+              }
+            `}</style>
+            {layers.length > 0 && (
+              <div className="mx-4 mb-3" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.1)' }}>
+                {layers.map((layer, index) => (
+                  <CompactStageLane
+                    key={layer.id}
+                    index={index}
+                    code={layer.code}
+                    sliderOffset={layerOffsets[index]}
+                    label={layer.label}
+                    muted={mutedIds.has(layer.id)}
+                    onToggleMute={() => toggleMute(layer.id)}
+                    onToggleSolo={() => toggleSolo(layer.id)}
+                    isSoloed={soloId === layer.id}
+                    onSliderChange={handleSliderChange}
+                  />
+                ))}
+              </div>
+            )}
+            <div className="mx-4">
+              <WorkshopOverlay
+                role={workshopRole}
+                seedVoice={workshopSeedVoice}
+                crate={crate}
+                previewingId={previewVoice?.id ?? null}
+                onClose={() => {
+                  setWorkshopSeedVoice(null);
+                  restoreStageAudio().then(() => setWorkshopOpen(false));
+                }}
+                onChangeRole={setWorkshopRole}
+                onPreview={previewWorkshopVoice}
+                onSaveToCrate={saveWorkshopVoiceToCrate}
+                onAddToStage={async (voice) => {
+                  await appendVoiceToStage(voice.code, voice.name);
+                  setWorkshopSeedVoice(null);
+                  setWorkshopOpen(false);
+                }}
+              />
+            </div>
+          </div>
+        ) : !hasCode ? (
           <div className="h-full flex flex-col items-center justify-center px-4 text-center">
-            <div className="text-lg font-bold tracking-[0.25em]" style={{ color: 'rgba(255,255,255,0.07)' }}>
-              STAGE
+            <div className="text-[13px]" style={{ color: 'rgba(255,255,255,0.46)' }}>
+              click a voice in the crate to begin
             </div>
-            <div className="mt-4 text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>
-              Drag voices up from the crate or open the workshop.
-            </div>
-            <div className="mt-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.16)' }}>
-              Beginners can start from the crate. Experts can perform in code.
-            </div>
-            <div className="mt-5 flex items-center gap-2">
-              <button
-                onClick={() => setWorkshopOpen(true)}
-                className="px-3 py-1.5 text-[11px] cursor-pointer transition-all"
-                style={{ color: '#ffffff', border: '1px solid rgba(255,255,255,0.12)' }}
-              >
-                open workshop
-              </button>
-              <button
-                onClick={() => appendVoiceToStage(crate[0]?.code || WORKSHOP_SEEDS.kick, crate[0]?.name || 'sub weight')}
-                className="px-3 py-1.5 text-[11px] cursor-pointer transition-all"
-                style={{ color: '#88ff88', border: '1px solid rgba(136,255,136,0.18)' }}
-              >
-                load first voice
-              </button>
+            <div className="mt-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.24)' }}>
+              or press 1–8 to load by number
             </div>
           </div>
         ) : (
-          <div className="py-2">
-            {preamble && (
-              <div className="px-4 py-1 mb-2">
-                <InteractiveCode
-                  code={preamble}
-                  onSliderChange={handleSliderChange}
-                  sliderOffset={0}
-                  disabled={isGenerating}
-                />
-              </div>
-            )}
-
+          <div className="py-3">
             {layers.map((layer, index) => (
               <LayerCard
                 key={layer.id}
@@ -625,59 +643,61 @@ export default function App() {
                 onSliderChange={handleSliderChange}
                 onToggleMute={() => toggleMute(layer.id)}
                 onToggleSolo={() => toggleSolo(layer.id)}
-                onFocus={() => setFocusedLayerId((current) => (current === layer.id ? null : layer.id))}
+                onFocus={() => {
+                  setFocusMode(false);
+                  setFocusedParamIndex(0);
+                  setSelectedLayerId((current) => (current === layer.id ? null : layer.id));
+                }}
                 onUpdateCode={(nextCode) => updateLayerCode(layer.id, nextCode)}
-                onDuplicate={() => duplicateLayer(layer.id)}
-                onSaveToCrate={() => saveLayerToCrate(layer.id)}
-                onRemove={() => removeLayer(layer.id)}
+                onChangeSound={(nextSound) => updateLayerSound(layer.id, nextSound)}
                 isMuted={mutedIds.has(layer.id)}
                 isSoloed={soloId === layer.id}
-                isFocused={focusedLayerId === layer.id}
+                isSelected={selectedLayerId === layer.id}
+                focusMode={focusMode && selectedLayerId === layer.id}
+                focusedParamIndex={selectedLayerId === layer.id ? focusedParamIndex : -1}
                 isPlaying={isPlaying}
                 bpm={bpm}
-                disabled={isGenerating}
+                disabled={false}
               />
             ))}
-
-            <div className="px-4 py-2 text-[9px] flex gap-4 flex-wrap" style={{ color: 'rgba(255,255,255,0.1)' }}>
-              <span>space play/stop</span>
-              <span>1-{Math.min(layers.length, 9)} select voice</span>
-              <span>m mute</span>
-              <span>s solo</span>
-              <span>esc unfocus</span>
-            </div>
           </div>
         )}
       </div>
 
+      <div className="shrink-0 px-4 py-1.5 flex items-center justify-between text-[9px]" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.22)' }}>
+        <div>
+          {focusMode
+            ? '↑↓ nudge value · tab next param · shift+tab prev · esc exit focus'
+            : workshopOpen
+              ? 'esc close · w close'
+              : savedTake
+                ? 'esc dismiss'
+                : layers.length > 0
+                  ? `space ${isPlaying ? 'stop' : 'play'} · 1-${Math.min(layers.length, 8)} select · ↑↓ navigate · enter focus · m mute · x remove · w workshop`
+                  : `space play · 1-${Math.min(crate.length, 8)} load · w workshop`
+          }
+        </div>
+        <div style={{ color: 'rgba(255,255,255,0.3)' }}>
+          {focusMode ? 'FOCUS' : workshopOpen ? 'WORKSHOP' : savedTake ? 'TAKE' : 'STAGE'}
+        </div>
+      </div>
+
       <SetDock
         crate={crate}
-        activeRole={crateRole}
-        focusedRole={focusedRole}
-        onChangeRole={setCrateRole}
+        stagedVoiceNames={stagedVoiceNames}
+        workshopOpen={workshopOpen}
         onAddVoice={appendVoiceToStage}
-        onOpenWorkshop={() => {
-          setWorkshopRole(focusedRole ?? crateRole);
-          setWorkshopOpen(true);
+        onRemoveVoice={(name) => {
+          const layer = layers.find((l) => l.label === name);
+          if (layer) void removeLayer(layer.id);
         }}
-      />
-
-      <WorkshopOverlay
-        open={workshopOpen}
-        role={workshopRole}
-        generatedVoices={generatedVoices}
-        crate={crate}
-        previewingId={previewVoiceId}
-        isGenerating={isGenerating}
-        onClose={() => setWorkshopOpen(false)}
-        onChangeRole={setWorkshopRole}
-        onGenerate={handleGenerateWorkshopVoice}
-        onPreview={previewWorkshopVoice}
-        onStopPreview={restoreStageAudio}
-        onSaveToCrate={saveWorkshopVoiceToCrate}
-        onAddToStage={async (voice) => {
-          await appendVoiceToStage(voice.code, voice.name);
-          setWorkshopOpen(false);
+        onToggleWorkshop={() => {
+          if (workshopOpen) {
+            setWorkshopSeedVoice(null);
+            restoreStageAudio().then(() => setWorkshopOpen(false));
+          } else {
+            openWorkshop();
+          }
         }}
       />
     </div>
