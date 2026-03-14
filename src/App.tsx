@@ -608,8 +608,10 @@ export default function App() {
             ? '←→ adjust · shift large step · tab next param · esc back'
             : nav.navLevel === 'lane'
               ? 'tab next line · enter adjust · e edit · esc back · m mute'
+              : nav.navLevel === 'crate-role'
+                ? '↑↓ navigate voices · ←→ switch role · enter stage · esc back'
               : nav.navLevel === 'crate'
-                ? '←→↑↓ navigate · enter stage/unstage · esc close'
+                ? 'tab switch role · enter browse voices · esc close'
               : nav.workshopOpen
                 ? 'tab navigate · enter select · p preview · s stage · esc back'
                 : savedTake
@@ -621,6 +623,7 @@ export default function App() {
         </div>
         <div style={{ color: 'rgba(255,255,255,0.3)' }}>
           {nav.navLevel === 'parameter' ? 'PARAMETER'
+            : nav.navLevel === 'crate-role' ? 'CRATE'
             : nav.navLevel === 'crate' ? 'CRATE'
             : nav.navLevel === 'lane' ? 'LANE'
             : nav.navLevel === 'workshop-variant' ? 'VARIANT'
@@ -634,7 +637,9 @@ export default function App() {
         crate={crate}
         stagedVoiceNames={stagedVoiceNames}
         crateIsOpen={nav.crateIsOpen}
-        crateNavIndex={nav.crateNavIndex}
+        crateRoleIndex={nav.crateRoleIndex}
+        crateVoiceIndex={nav.crateVoiceIndex}
+        navLevel={nav.navLevel}
         crateHighlighted={nav.crateHighlighted}
         onAddVoice={appendVoiceToStage}
         onRemoveVoice={(name) => {

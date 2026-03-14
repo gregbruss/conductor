@@ -447,12 +447,13 @@ export const VOICE_LIBRARY: VoicePreset[] = [
   {
     id: 'kick-pressure-floor',
     name: 'pressure floor',
-    description: 'Pitched kick with sub oscillator layered underneath. Moves air.',
+    description: 'Deep four-on-the-floor with heavy low-pass and room weight.',
     role: 'kick',
-    code: `$: s("bd*4").gain(0.9)
+    code: `$: s("bd*4")
 .lpf(slider(160, 60, 300))
-.add(note("c1").s("sine").gain(0.4).decay(0.15))`,
-    tags: ['sub', 'layered', 'pressure'],
+.room(slider(0.12, 0, 0.5))
+.gain(slider(1.1, 0, 1.5))`,
+    tags: ['deep', 'weighted', 'pressure'],
   },
   {
     id: 'kick-skip-pulse',

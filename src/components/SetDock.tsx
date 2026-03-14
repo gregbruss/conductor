@@ -1,11 +1,15 @@
+import { useMemo } from 'react';
 import type { CrateVoice } from '../types';
 import type { NavLevel } from '../hooks/useTreeNav';
+import { CRATE_ROLES } from '../hooks/useTreeNav';
 
 interface Props {
   crate: CrateVoice[];
   stagedVoiceNames: Set<string>;
   crateIsOpen: boolean;
-  crateNavIndex: number;
+  crateRoleIndex: number;
+  crateVoiceIndex: number;
+  navLevel: NavLevel;
   crateHighlighted: boolean;
   onAddVoice: (code: string, label: string) => void;
   onRemoveVoice: (name: string) => void;
@@ -15,12 +19,33 @@ export default function SetDock({
   crate,
   stagedVoiceNames,
   crateIsOpen,
-  crateNavIndex,
+  crateRoleIndex,
+  crateVoiceIndex,
+  navLevel,
   crateHighlighted,
   onAddVoice,
   onRemoveVoice,
 }: Props) {
   const isActive = crateHighlighted || crateIsOpen;
+  const inVoiceLevel = navLevel === 'crate-role';
+
+  const crateByRole = useMemo(() => {
+    const map: Record<string, CrateVoice[]> = {};
+    for (const role of CRATE_ROLES) map[role] = [];
+    for (const voice of crate) {
+      if (map[voice.role]) map[voice.role].push(voice);
+    }
+    return map;
+  }, [crate]);
+
+  // Count staged per role
+  const stagedCount = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const role of CRATE_ROLES) {
+      counts[role] = (crateByRole[role] || []).filter((v) => stagedVoiceNames.has(v.name)).length;
+    }
+    return counts;
+  }, [crateByRole, stagedVoiceNames]);
 
   return (
     <div
@@ -35,69 +60,104 @@ export default function SetDock({
       </div>
 
       {crateIsOpen ? (
-        <div
-          className="mt-3"
-          style={{ animation: 'crateSlideUp 0.2s ease-out' }}
-        >
+        <div className="mt-3" style={{ animation: 'crateSlideUp 0.15s ease-out' }}>
           <style>{`
             @keyframes crateSlideUp {
-              from { opacity: 0; transform: translateY(12px); }
+              from { opacity: 0; transform: translateY(8px); }
               to { opacity: 1; transform: translateY(0); }
             }
           `}</style>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
-            {crate.map((voice, index) => {
-              const staged = stagedVoiceNames.has(voice.name);
-              const active = crateNavIndex === index;
+
+          {/* Role columns */}
+          <div className="flex gap-1 overflow-x-auto">
+            {CRATE_ROLES.map((role, roleIdx) => {
+              const voices = crateByRole[role] || [];
+              if (voices.length === 0) return null;
+
+              const isSelectedRole = crateRoleIndex === roleIdx;
+              const roleHighlighted = navLevel === 'crate' && isSelectedRole;
+              const staged = stagedCount[role] || 0;
+
               return (
-                <button
-                  key={voice.id}
-                  onClick={() => {
-                    if (staged) onRemoveVoice(voice.name);
-                    else onAddVoice(voice.code, voice.name);
-                  }}
-                  className="px-3 py-3 text-left text-[11px] cursor-pointer transition-all"
+                <div
+                  key={role}
+                  className="flex-1 min-w-[100px]"
                   style={{
-                    border: active
-                      ? '2px solid rgba(136,255,136,0.5)'
-                      : `1px solid ${staged ? 'rgba(136,255,136,0.18)' : 'rgba(255,255,255,0.1)'}`,
-                    color: active ? '#88ff88' : staged ? 'rgba(255,255,255,0.45)' : '#ffffff',
-                    background: active
-                      ? 'rgba(136,255,136,0.1)'
-                      : staged ? 'rgba(136,255,136,0.04)' : 'rgba(255,255,255,0.03)',
+                    border: roleHighlighted
+                      ? '2px solid rgba(136,255,136,0.4)'
+                      : isSelectedRole && inVoiceLevel
+                        ? '1px solid rgba(136,255,136,0.2)'
+                        : '1px solid rgba(255,255,255,0.06)',
+                    background: roleHighlighted
+                      ? 'rgba(136,255,136,0.06)'
+                      : isSelectedRole && inVoiceLevel
+                        ? 'rgba(136,255,136,0.03)'
+                        : 'transparent',
                   }}
                 >
-                  {voice.name}{staged ? ' ✓' : ''}
-                </button>
+                  {/* Role header */}
+                  <div
+                    className="px-2 py-1.5 text-[9px] uppercase tracking-[0.18em]"
+                    style={{
+                      color: roleHighlighted || (isSelectedRole && inVoiceLevel) ? '#88ff88' : 'rgba(255,255,255,0.35)',
+                      borderBottom: '1px solid rgba(255,255,255,0.06)',
+                    }}
+                  >
+                    {role}{staged > 0 ? ` · ${staged}` : ''}
+                  </div>
+
+                  {/* Voice list */}
+                  <div className="py-1">
+                    {voices.map((voice, voiceIdx) => {
+                      const isStaged = stagedVoiceNames.has(voice.name);
+                      const voiceHighlighted = inVoiceLevel && isSelectedRole && crateVoiceIndex === voiceIdx;
+
+                      return (
+                        <button
+                          key={voice.id}
+                          type="button"
+                          onClick={() => {
+                            if (isStaged) onRemoveVoice(voice.name);
+                            else onAddVoice(voice.code, voice.name);
+                          }}
+                          className="w-full text-left px-2 py-1 text-[10px] cursor-pointer transition-colors"
+                          style={{
+                            color: voiceHighlighted
+                              ? '#88ff88'
+                              : isStaged
+                                ? 'rgba(255,255,255,0.35)'
+                                : 'rgba(255,255,255,0.7)',
+                            background: voiceHighlighted
+                              ? 'rgba(136,255,136,0.12)'
+                              : 'transparent',
+                            borderLeft: voiceHighlighted
+                              ? '2px solid #88ff88'
+                              : '2px solid transparent',
+                          }}
+                        >
+                          {voice.name}{isStaged ? ' ✓' : ''}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               );
             })}
           </div>
-          <div className="mt-2 text-[9px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
-            ←→↑↓ navigate · enter stage/unstage · esc close
-          </div>
         </div>
       ) : (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {crate.map((voice) => {
-            const staged = stagedVoiceNames.has(voice.name);
-            return (
-              <button
-                key={voice.id}
-                onClick={() => {
-                  if (staged) onRemoveVoice(voice.name);
-                  else onAddVoice(voice.code, voice.name);
-                }}
-                className="px-3 py-2 text-left text-[11px] cursor-pointer transition-all"
-                style={{
-                  border: `1px solid ${staged ? 'rgba(136,255,136,0.18)' : 'rgba(255,255,255,0.1)'}`,
-                  color: staged ? 'rgba(255,255,255,0.45)' : '#ffffff',
-                  background: staged ? 'rgba(136,255,136,0.04)' : 'rgba(255,255,255,0.03)',
-                }}
-              >
-                {voice.name}{staged ? ' ✓' : ''}
-              </button>
-            );
-          })}
+        /* Closed state: compact row of staged voice names */
+        <div className="mt-2 flex flex-wrap gap-2">
+          {crate.filter((v) => stagedVoiceNames.has(v.name)).map((voice) => (
+            <span key={voice.id} className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+              {voice.name} ✓
+            </span>
+          ))}
+          {crate.filter((v) => stagedVoiceNames.has(v.name)).length === 0 && (
+            <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>
+              enter to browse
+            </span>
+          )}
         </div>
       )}
     </div>

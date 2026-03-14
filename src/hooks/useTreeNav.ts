@@ -8,11 +8,14 @@ import { findAdjustableLines, nudgeLineValue } from '../lib/codeNudge';
 export type NavLevel =
   | 'stage'
   | 'crate'
+  | 'crate-role'
   | 'lane'
   | 'parameter'
   | 'workshop'
   | 'workshop-variant'
   | 'workshop-parameter';
+
+export const CRATE_ROLES = ['kick', 'hats', 'snare', 'bass', 'pad', 'lead', 'texture', 'perc', 'fx'] as const;
 
 type TargetKind = 'lane' | 'crate';
 
@@ -70,7 +73,8 @@ export interface TreeNavState {
   isParameterActive: boolean;
   stageTargetKind: TargetKind;
   crateIsOpen: boolean;
-  crateNavIndex: number;
+  crateRoleIndex: number;
+  crateVoiceIndex: number;
   crateHighlighted: boolean;
 }
 
@@ -90,7 +94,8 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
   const [navLevel, setNavLevel] = useState<NavLevel>('stage');
   const [stageIndex, setStageIndex] = useState(-1); // -1 = nothing selected yet
   const [lineIndex, setLineIndex] = useState(0);
-  const [crateNavIndex, setCrateNavIndex] = useState(0);
+  const [crateRoleIndex, setCrateRoleIndex] = useState(0);
+  const [crateVoiceIndex, setCrateVoiceIndex] = useState(0);
   const [workshopTabIndex, setWorkshopTabIndex] = useState(0);
   const [lastLaneId, setLastLaneId] = useState<string | null>(null);
 
@@ -128,8 +133,20 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
 
   const workshopOpen = navLevel === 'workshop' || navLevel === 'workshop-variant' || navLevel === 'workshop-parameter';
   const isParameterActive = navLevel === 'parameter' || navLevel === 'workshop-parameter';
-  const crateIsOpen = navLevel === 'crate';
+  const crateIsOpen = navLevel === 'crate' || navLevel === 'crate-role';
   const crateHighlighted = navLevel === 'stage' && stageIndex >= 0 && kind === 'crate';
+
+  // Group crate voices by role
+  const crateByRole = useMemo(() => {
+    const map: Record<string, CrateVoice[]> = {};
+    for (const role of CRATE_ROLES) map[role] = [];
+    for (const voice of crate) {
+      if (map[voice.role]) map[voice.role].push(voice);
+    }
+    return map;
+  }, [crate]);
+
+  const activeRoleVoices = crateByRole[CRATE_ROLES[crateRoleIndex]] ?? [];
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return;
@@ -155,7 +172,7 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
     }
 
     // 1-8: stage + lane + crate levels only (not parameter, not workshop)
-    if (/^[1-8]$/.test(event.key) && (navLevel === 'stage' || navLevel === 'lane' || navLevel === 'crate')) {
+    if (/^[1-8]$/.test(event.key) && (navLevel === 'stage' || navLevel === 'lane' || navLevel === 'crate' || navLevel === 'crate-role')) {
       const idx = parseInt(event.key, 10) - 1;
       if (idx < layerCount) {
         setNavLevel('stage');
@@ -254,33 +271,64 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
       return;
     }
 
-    // --- CRATE LEVEL (drawer open, arrow-navigate grid) ---
+    // --- CRATE LEVEL (browsing role columns) ---
     if (navLevel === 'crate') {
       switch (event.key) {
         case 'Tab':
         case 'ArrowRight':
           event.preventDefault();
-          if (crateCount > 0) {
-            setCrateNavIndex((prev) => wrap(prev, event.shiftKey ? -1 : 1, crateCount));
-          }
+          setCrateRoleIndex((prev) => wrap(prev, event.shiftKey ? -1 : 1, CRATE_ROLES.length));
           break;
         case 'ArrowLeft':
           event.preventDefault();
-          if (crateCount > 0) {
-            setCrateNavIndex((prev) => wrap(prev, -1, crateCount));
-          }
-          break;
-        case 'ArrowDown':
-          event.preventDefault();
-          setCrateNavIndex((prev) => Math.min(prev + 3, crateCount - 1));
-          break;
-        case 'ArrowUp':
-          event.preventDefault();
-          setCrateNavIndex((prev) => Math.max(prev - 3, 0));
+          setCrateRoleIndex((prev) => wrap(prev, -1, CRATE_ROLES.length));
           break;
         case 'Enter': {
           event.preventDefault();
-          const voice = crate[crateNavIndex];
+          const voices = crateByRole[CRATE_ROLES[crateRoleIndex]] ?? [];
+          if (voices.length > 0) {
+            setCrateVoiceIndex(0);
+            setNavLevel('crate-role');
+          }
+          break;
+        }
+        case 'Escape':
+          setNavLevel('stage');
+          break;
+      }
+      return;
+    }
+
+    // --- CRATE-ROLE LEVEL (browsing voices within a role) ---
+    if (navLevel === 'crate-role') {
+      switch (event.key) {
+        case 'Tab':
+        case 'ArrowDown':
+          event.preventDefault();
+          if (activeRoleVoices.length > 0) {
+            setCrateVoiceIndex((prev) => wrap(prev, event.shiftKey ? -1 : 1, activeRoleVoices.length));
+          }
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          if (activeRoleVoices.length > 0) {
+            setCrateVoiceIndex((prev) => wrap(prev, -1, activeRoleVoices.length));
+          }
+          break;
+        case 'ArrowRight':
+          // Move to next role column, stay in crate-role level
+          event.preventDefault();
+          setCrateRoleIndex((prev) => wrap(prev, 1, CRATE_ROLES.length));
+          setCrateVoiceIndex(0);
+          break;
+        case 'ArrowLeft':
+          event.preventDefault();
+          setCrateRoleIndex((prev) => wrap(prev, -1, CRATE_ROLES.length));
+          setCrateVoiceIndex(0);
+          break;
+        case 'Enter': {
+          event.preventDefault();
+          const voice = activeRoleVoices[crateVoiceIndex];
           if (voice) {
             if (stagedVoiceNames.has(voice.name)) {
               const layer = layers.find((l) => l.label === voice.name);
@@ -295,7 +343,7 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
           break;
         }
         case 'Escape':
-          setNavLevel('stage');
+          setNavLevel('crate');
           break;
       }
       return;
@@ -416,9 +464,9 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
         if (kind === 'lane') {
           setNavLevel('lane');
         } else {
-          // crate
+          // crate — open at first role
           setNavLevel('crate');
-          setCrateNavIndex(0);
+          setCrateRoleIndex(0);
         }
         break;
       }
@@ -458,7 +506,7 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
     }
   }, [
     navLevel, stageIndex, lineIndex, workshopTabIndex,
-    layers, crate, layerCount, crateCount, crateNavIndex, stageSize,
+    layers, crate, layerCount, crateCount, crateRoleIndex, crateVoiceIndex, crateByRole, activeRoleVoices, stageSize,
     workshopRingSize, workshopRoleCount, kind,
     selectedLayerId, stagedVoiceNames, isPlaying,
     toggleMute, toggleSolo, removeLayer,
@@ -486,7 +534,8 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
     isParameterActive,
     stageTargetKind: kind,
     crateIsOpen,
-    crateNavIndex,
+    crateRoleIndex,
+    crateVoiceIndex,
     crateHighlighted,
   };
 }

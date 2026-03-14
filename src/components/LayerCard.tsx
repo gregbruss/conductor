@@ -1,7 +1,5 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Layer } from '../types';
-import { CodeDisplay, SliderRow } from './InteractiveCode';
-import { generateRowGrid } from './Punchcard';
 import { findAdjustableLines } from '../lib/codeNudge';
 import type { NavLevel } from '../hooks/useTreeNav';
 
@@ -25,95 +23,125 @@ interface Props {
   disabled?: boolean;
 }
 
-function PulseStrip({
-  code,
-  isPlaying,
-  dimmed,
-  bpm,
-}: {
-  code: string;
-  isPlaying: boolean;
-  dimmed: boolean;
-  bpm: number;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animRef = useRef<number>(0);
+function useBeatIndex(isPlaying: boolean, bpm: number) {
+  const [beatIndex, setBeatIndex] = useState(0);
   const startRef = useRef<number>(0);
-  const grid = generateRowGrid(code);
-
-  const draw = useCallback((ts: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
-
-    const width = rect.width;
-    const height = rect.height;
-    ctx.clearRect(0, 0, width, height);
-
-    const cols = 16;
-    const gap = 2;
-    const cellWidth = (width - gap * (cols + 1)) / cols;
-    const cellHeight = height - gap * 2;
-
-    if (!startRef.current && isPlaying) startRef.current = ts;
-    const cycle = (60 / bpm) * 4 * 1000;
-    const progress = isPlaying && startRef.current ? ((ts - startRef.current) % cycle) / cycle : -1;
-    const playCol = progress >= 0 ? Math.floor(progress * cols) : -1;
-
-    for (let col = 0; col < cols; col += 1) {
-      const x = gap + col * (cellWidth + gap);
-      const active = grid[col];
-      const atHead = col === playCol;
-
-      ctx.fillStyle = '#ffffff';
-      if (dimmed) {
-        ctx.globalAlpha = active ? 0.05 : 0.018;
-      } else {
-        ctx.globalAlpha = active ? (atHead && isPlaying ? 0.75 : 0.22) : 0.03;
-      }
-      ctx.fillRect(x, gap, cellWidth, cellHeight);
-
-      if (active && atHead && isPlaying && !dimmed) {
-        ctx.globalAlpha = 0.35;
-        ctx.fillStyle = '#88ff88';
-        ctx.fillRect(x, gap, cellWidth, cellHeight);
-      }
-    }
-
-    ctx.globalAlpha = 1;
-    if (isPlaying && !dimmed) animRef.current = requestAnimationFrame(draw);
-  }, [bpm, dimmed, grid, isPlaying]);
 
   useEffect(() => {
-    startRef.current = 0;
-    if (isPlaying && !dimmed) {
-      animRef.current = requestAnimationFrame(draw);
-    } else {
-      requestAnimationFrame(draw);
+    if (!isPlaying) {
+      setBeatIndex(0);
+      startRef.current = 0;
+      return undefined;
     }
-    return () => cancelAnimationFrame(animRef.current);
-  }, [dimmed, draw, isPlaying]);
 
-  return <canvas ref={canvasRef} className="block w-full" style={{ height: '18px' }} />;
+    let raf = 0;
+    const step = (ts: number) => {
+      if (!startRef.current) startRef.current = ts;
+      const beatMs = (60 / Math.max(bpm, 1)) * 1000;
+      const nextBeat = Math.floor((ts - startRef.current) / beatMs);
+      setBeatIndex(nextBeat);
+      raf = requestAnimationFrame(step);
+    };
+
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [bpm, isPlaying]);
+
+  return beatIndex;
 }
 
-function LineNavCodeView({ code, lineIndex, isParameterActive }: {
+function splitQuotedContent(content: string) {
+  return content.split(/(\s+|[\[\]<>])/).filter((part) => part.length > 0);
+}
+
+function AnimatedLine({
+  line,
+  beatIndex,
+  isFocused,
+  dimmed,
+}: {
+  line: string;
+  beatIndex: number;
+  isFocused: boolean;
+  dimmed: boolean;
+}) {
+  const parts: React.ReactNode[] = [];
+  const regex = /"([^"]*)"/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(line)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(
+        <span key={`text-${lastIndex}`} style={{ color: dimmed ? 'rgba(255,255,255,0.28)' : (isFocused ? '#ffffff' : 'rgba(255,255,255,0.72)') }}>
+          {line.slice(lastIndex, match.index)}
+        </span>,
+      );
+    }
+
+    const content = match[1];
+    const tokens = splitQuotedContent(content);
+    const musicalTokens = tokens.filter((token) => token.trim() && !/^\s+$/.test(token) && !/^[\[\]<>]$/.test(token));
+    const activeToken = musicalTokens.length > 0 ? beatIndex % musicalTokens.length : -1;
+    let musicalIndex = 0;
+
+    parts.push(<span key={`quote-open-${match.index}`} style={{ color: dimmed ? 'rgba(255,255,255,0.28)' : '#ffffff' }}>"</span>);
+    tokens.forEach((token, index) => {
+      const isMusical = token.trim() && !/^[\[\]<>]$/.test(token);
+      const isActive = isMusical && musicalIndex === activeToken;
+      parts.push(
+        <span
+          key={`token-${match.index}-${index}`}
+          style={{
+            color: dimmed ? 'rgba(255,255,255,0.28)' : isActive ? '#88ff88' : (isFocused ? '#ffffff' : 'rgba(255,255,255,0.72)'),
+            background: isActive ? 'rgba(136,255,136,0.14)' : 'transparent',
+            boxShadow: isActive ? '0 0 0 1px rgba(136,255,136,0.24) inset' : 'none',
+          }}
+        >
+          {token}
+        </span>,
+      );
+      if (isMusical) musicalIndex += 1;
+    });
+    parts.push(<span key={`quote-close-${match.index}`} style={{ color: dimmed ? 'rgba(255,255,255,0.28)' : '#ffffff' }}>"</span>);
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < line.length) {
+    parts.push(
+      <span key={`tail-${lastIndex}`} style={{ color: dimmed ? 'rgba(255,255,255,0.28)' : (isFocused ? '#ffffff' : 'rgba(255,255,255,0.72)') }}>
+        {line.slice(lastIndex)}
+      </span>,
+    );
+  }
+
+  if (parts.length === 0) {
+    parts.push(
+      <span key="plain" style={{ color: dimmed ? 'rgba(255,255,255,0.28)' : (isFocused ? '#ffffff' : 'rgba(255,255,255,0.72)') }}>
+        {line}
+      </span>,
+    );
+  }
+
+  return <>{parts}</>;
+}
+
+function LineNavCodeView({ code, lineIndex, isParameterActive, beatIndex, compact, dimmed }: {
   code: string;
   lineIndex: number;
   isParameterActive: boolean;
+  beatIndex: number;
+  compact: boolean;
+  dimmed: boolean;
 }) {
-  const lines = code.split('\n');
+  const allLines = code.split('\n');
+  const visibleLines = compact ? allLines.slice(0, 3) : allLines.slice(0, 4);
   const adjustable = findAdjustableLines(code);
 
   return (
     <div className="text-sm leading-relaxed" style={{ fontFamily: 'monospace' }}>
-      {lines.map((line, i) => {
+      {visibleLines.map((line, i) => {
         const isFocused = i === lineIndex;
         const param = adjustable.find((a) => a.lineIndex === i);
         const isAdj = !!param;
@@ -148,9 +176,7 @@ function LineNavCodeView({ code, lineIndex, isParameterActive }: {
               </>
             ) : (
               <>
-                <span style={{ color: isFocused ? '#ffffff' : (isAdj ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.5)') }}>
-                  {line}
-                </span>
+                <AnimatedLine line={line} beatIndex={beatIndex} isFocused={isFocused} dimmed={dimmed} />
                 {isAdj && !isFocused && (
                   <span className="text-[9px] ml-auto shrink-0" style={{ color: 'rgba(255,255,255,0.2)' }}>
                     {param.label} {param.max >= 100 ? Math.round(param.value) : param.value.toFixed(2)}
@@ -171,6 +197,11 @@ function LineNavCodeView({ code, lineIndex, isParameterActive }: {
           </div>
         );
       })}
+      {allLines.length > visibleLines.length && (
+        <div className="px-2 pt-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>
+          …
+        </div>
+      )}
     </div>
   );
 }
@@ -197,6 +228,7 @@ export default function LayerCard({
   const [isEditing, setIsEditing] = useState(false);
   const [draftCode, setDraftCode] = useState(layer.code);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const beatIndex = useBeatIndex(isPlaying, bpm);
 
   useEffect(() => {
     if (!isEditing) setDraftCode(layer.code);
@@ -215,125 +247,89 @@ export default function LayerCard({
 
   const effectivelyMuted = isMuted && !isSoloed;
 
+  const isInside = navLevel === 'lane' || navLevel === 'parameter' || isEditing;
+  const compact = !isSelected || navLevel === 'stage';
+
   return (
     <div
-      className="mx-4 mb-3"
+      className="mx-4 mb-1"
       style={{
-        opacity: effectivelyMuted ? 0.62 : 1,
-        border: isSelected ? '2px solid rgba(136,255,136,0.35)' : '1px solid rgba(255,255,255,0.08)',
-        background: isSelected ? 'rgba(136,255,136,0.04)' : 'rgba(255,255,255,0.015)',
+        opacity: effectivelyMuted ? 0.5 : 1,
+        border: isSelected ? '2px solid rgba(136,255,136,0.35)' : '1px solid rgba(255,255,255,0.06)',
+        background: isSelected ? 'rgba(136,255,136,0.04)' : 'transparent',
       }}
       onClick={onFocus}
     >
-      <div className="flex items-center gap-3 px-4 py-3">
+      {/* Header — always visible */}
+      <div className="flex items-center gap-3 px-4 py-2">
         <span className="w-4 text-[11px]" style={{ color: isSelected ? '#88ff88' : 'rgba(255,255,255,0.25)' }}>
           {index + 1}
         </span>
-        <span className="text-sm text-white">{layer.label}</span>
-        {(navLevel === 'lane' || navLevel === 'parameter') && (
+        <span className="text-[12px] text-white">{layer.label}</span>
+        {effectivelyMuted && (
+          <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>MUTED</span>
+        )}
+        {isInside && (
           <span className="text-[9px] uppercase tracking-[0.18em]" style={{ color: '#88ff88' }}>
-            {navLevel === 'parameter' ? '←→ adjust · tab next · esc back' : 'tab line · enter adjust · esc back'}
-          </span>
-        )}
-        {isEditing && navLevel === 'stage' && (
-          <span className="text-[9px] uppercase tracking-[0.18em]" style={{ color: 'rgba(255,255,255,0.22)' }}>
-            editing
-          </span>
-        )}
-        {effectivelyMuted && !isEditing && (
-          <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
-            MUTED
+            {isEditing ? 'editing' : navLevel === 'parameter' ? '←→ adjust' : 'tab · enter · esc'}
           </span>
         )}
         <div className="flex-1" />
         <button
           type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggleMute();
-          }}
-          className="text-[10px] px-2 py-0.5 cursor-pointer"
-          style={{ color: isMuted ? '#ff9d84' : 'rgba(255,255,255,0.28)' }}
+          onClick={(event) => { event.stopPropagation(); onToggleMute(); }}
+          className="text-[10px] px-1 cursor-pointer"
+          style={{ color: isMuted ? '#ff9d84' : 'rgba(255,255,255,0.2)' }}
         >
           [m]
         </button>
         <button
           type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggleSolo();
-          }}
-          className="text-[10px] px-2 py-0.5 cursor-pointer"
-          style={{ color: isSoloed ? '#88ff88' : 'rgba(255,255,255,0.28)' }}
+          onClick={(event) => { event.stopPropagation(); onToggleSolo(); }}
+          className="text-[10px] px-1 cursor-pointer"
+          style={{ color: isSoloed ? '#88ff88' : 'rgba(255,255,255,0.2)' }}
         >
           [s]
         </button>
       </div>
 
-      {!effectivelyMuted || isEditing ? (
-        <>
-          <div className="px-4 pl-8">
-            {isEditing ? (
-              <textarea
-                value={draftCode}
-                onClick={(event) => event.stopPropagation()}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setDraftCode(next);
-                  queueLiveUpdate(next);
-                }}
-                onBlur={() => {
+      {!effectivelyMuted && (
+        <div className="px-4 pl-8 pb-3 pt-0">
+          {isEditing ? (
+            <textarea
+              value={draftCode}
+              onClick={(event) => event.stopPropagation()}
+              onChange={(event) => {
+                const next = event.target.value;
+                setDraftCode(next);
+                queueLiveUpdate(next);
+              }}
+              onBlur={() => {
+                if (draftCode.trim()) onUpdateCode(draftCode);
+                setIsEditing(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault();
                   if (draftCode.trim()) onUpdateCode(draftCode);
                   setIsEditing(false);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Escape') {
-                    event.preventDefault();
-                    setDraftCode(layer.code);
-                    setIsEditing(false);
-                  }
-                }}
-                disabled={disabled}
-                className="w-full min-h-[112px] resize-y bg-transparent outline-none text-sm leading-relaxed"
-                style={{
-                  color: '#ffffff',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  padding: '8px 10px',
-                }}
-                spellCheck={false}
-              />
-            ) : (navLevel === 'lane' || navLevel === 'parameter') ? (
-              <LineNavCodeView code={layer.code} lineIndex={navLineIndex} isParameterActive={navLevel === 'parameter'} />
-            ) : (
-              <button
-                type="button"
-                className="w-full cursor-text text-left"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setIsEditing(true);
-                }}
-              >
-                <CodeDisplay
-                  code={layer.code}
-                  onSoundChange={(nextSound) => onChangeSound(nextSound)}
-                />
-              </button>
-            )}
-          </div>
-
-          <div className="px-4 pl-8 pt-3" onClick={(event) => event.stopPropagation()}>
-            <PulseStrip
-              code={layer.code}
-              isPlaying={isPlaying}
-              dimmed={effectivelyMuted}
-              bpm={bpm}
+                }
+              }}
+              disabled={disabled}
+              className="w-full min-h-[100px] resize-y bg-transparent outline-none text-sm leading-relaxed"
+              style={{ color: '#ffffff', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 10px' }}
+              spellCheck={false}
             />
-          </div>
-
-        </>
-      ) : (
-        <div className="px-4 pb-3 pl-8 text-[11px] tracking-[0.18em]" style={{ color: 'rgba(255,255,255,0.22)' }}>
-          ································
+          ) : (
+            <LineNavCodeView
+              code={layer.code}
+              lineIndex={navLineIndex}
+              isParameterActive={navLevel === 'parameter'}
+              beatIndex={beatIndex}
+              compact={compact}
+              dimmed={effectivelyMuted}
+            />
+          )}
         </div>
       )}
     </div>
