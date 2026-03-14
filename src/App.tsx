@@ -6,7 +6,7 @@ import SetDock from './components/SetDock';
 import LandingPage from './components/LandingPage';
 import WorkshopOverlay from './components/WorkshopOverlay';
 import { parseLayers, reconstructCode } from './lib/parser';
-import { createCrateVoice, loadCrate, saveCrate } from './lib/crateStore';
+import { loadCrate, saveCrate } from './lib/crateStore';
 import { useTreeNav, type NavLevel } from './hooks/useTreeNav';
 import type { CrateVoice, VoiceRole } from './types';
 
@@ -27,19 +27,6 @@ function extractBpm(code: string): number {
   return match ? parseFloat(match[1]) : 120;
 }
 
-function guessRole(label: string, code = ''): VoiceRole | null {
-  const haystack = `${label} ${code}`.toLowerCase();
-  if (haystack.includes('kick') || haystack.includes('bd')) return 'kick';
-  if (haystack.includes('hat') || haystack.includes('hh')) return 'hats';
-  if (haystack.includes('snare') || haystack.includes('sd') || haystack.includes('clap') || haystack.includes('cp')) return 'snare';
-  if (haystack.includes('bass') || haystack.includes('sub')) return 'bass';
-  if (haystack.includes('pad') || haystack.includes('chord') || haystack.includes('supersaw')) return 'pad';
-  if (haystack.includes('lead') || haystack.includes('melody')) return 'lead';
-  if (haystack.includes('texture') || haystack.includes('noise') || haystack.includes('dust')) return 'texture';
-  if (haystack.includes('perc') || haystack.includes('rim') || haystack.includes('tom')) return 'perc';
-  if (haystack.includes('fx') || haystack.includes('cr') || haystack.includes('impact')) return 'fx';
-  return null;
-}
 
 function buildBaseCodeForNewVoice(currentCode: string, bpm: number): string {
   if (currentCode.trim()) return currentCode;
@@ -121,8 +108,6 @@ export default function App() {
   const [mutedIds, setMutedIds] = useState<Set<string>>(new Set());
   const [soloId, setSoloId] = useState<string | null>(null);
   const [crate, setCrate] = useState<CrateVoice[]>(() => loadCrate());
-  const [workshopRole, setWorkshopRole] = useState<VoiceRole>('bass');
-  const [workshopSeedVoice, setWorkshopSeedVoice] = useState<CrateVoice | null>(null);
   const [previewVoice, setPreviewVoice] = useState<CrateVoice | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -325,22 +310,6 @@ export default function App() {
     if (ok) setPreviewVoice(voice);
   };
 
-  const saveWorkshopVoiceToCrate = (voice: CrateVoice) => {
-    const exists = crate.some((crateVoice) => crateVoice.name === voice.name && crateVoice.code === voice.code);
-    if (exists) {
-      setStatusMessage(`${voice.name} is already in the crate`);
-      return;
-    }
-    const nextVoice = createCrateVoice({
-      name: voice.name,
-      description: voice.description,
-      role: voice.role,
-      code: voice.code,
-      tags: voice.tags,
-    });
-    setCrate((previous) => [...previous, nextVoice]);
-    setStatusMessage(`Saved ${voice.name} to the crate`);
-  };
 
   const handlePlay = async () => {
     if (!code) return;
@@ -383,7 +352,6 @@ export default function App() {
     setSavedTake(null);
     setMutedIds(new Set());
     setSoloId(null);
-    setWorkshopSeedVoice(null);
     setPreviewVoice(null);
     setCode('');
   };
@@ -396,21 +364,7 @@ export default function App() {
 
   const openWorkshopCb = useCallback(() => {
     setSavedTake(null);
-    const selectedLayer = layers.find((layer) => layer.id === selectedLayerRef.current);
-    const inferredRole = guessRole(selectedLayer?.label || '', selectedLayer?.code || '') || 'bass';
-    setWorkshopRole(inferredRole);
-    if (selectedLayer) {
-      setWorkshopSeedVoice(createCrateVoice({
-        name: selectedLayer.label,
-        description: 'Shaping from stage',
-        role: inferredRole,
-        code: selectedLayer.code,
-        tags: [inferredRole, 'stage'],
-      }));
-    } else {
-      setWorkshopSeedVoice(null);
-    }
-  }, [layers]);
+  }, []);
 
   const undoCb = useCallback(() => {
     if (history.length === 0) return;
@@ -427,14 +381,9 @@ export default function App() {
   }, [history, mutedIds, soloId]);
 
   const closeWorkshopCb = useCallback(() => {
-    setWorkshopSeedVoice(null);
     void restoreStageAudio();
   }, [restoreStageAudio]);
 
-  const changeRoleCb = useCallback((roleIndex: number) => {
-    const roles: VoiceRole[] = ['kick', 'hats', 'bass', 'pad', 'texture', 'fx'];
-    if (roleIndex < roles.length) setWorkshopRole(roles[roleIndex]);
-  }, []);
 
   const nav = useTreeNav({
     layers,
@@ -453,7 +402,7 @@ export default function App() {
     undo: undoCb,
     openWorkshop: openWorkshopCb,
     closeWorkshop: closeWorkshopCb,
-    onWorkshopChangeRole: changeRoleCb,
+    onWorkshopChangeRole: () => {},
     onWorkshopSelectVariant: () => {},
     onWorkshopStageVariant: () => {},
     onWorkshopPreviewVariant: () => {},
@@ -548,19 +497,24 @@ export default function App() {
             `}</style>
             <div className="mx-4">
               <WorkshopOverlay
-                role={workshopRole}
-                seedVoice={workshopSeedVoice}
                 crate={crate}
+                stagedVoiceNames={stagedVoiceNames}
                 previewingId={previewVoice?.id ?? null}
                 navLevel={nav.navLevel}
                 workshopTabIndex={nav.workshopTabIndex}
                 onClose={closeWorkshopCb}
-                onChangeRole={setWorkshopRole}
                 onPreview={previewWorkshopVoice}
-                onSaveToCrate={saveWorkshopVoiceToCrate}
                 onAddToStage={async (voice) => {
                   await appendVoiceToStage(voice.code, voice.name);
-                  setWorkshopSeedVoice(null);
+                }}
+                onRemoveFromCrate={(voiceId) => {
+                  setCrate((prev) => prev.filter((v) => v.id !== voiceId));
+                }}
+                onAddToCrate={(voice) => {
+                  setCrate((prev) => [...prev, voice]);
+                }}
+                onUpdateCrateVoice={(voiceId, newCode) => {
+                  setCrate((prev) => prev.map((v) => v.id === voiceId ? { ...v, code: newCode } : v));
                 }}
               />
             </div>
@@ -572,6 +526,12 @@ export default function App() {
             </div>
             <div className="mt-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
               press tab to start
+            </div>
+            <div className="mt-8 space-y-1.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.18)' }}>
+              <div>C — Crate (browse your catalog)</div>
+              <div>W — Workshop (add new pieces)</div>
+              <div>Spacebar — Play / Stop</div>
+              <div>R — Record</div>
             </div>
           </div>
         ) : (

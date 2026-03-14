@@ -171,6 +171,24 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
       return;
     }
 
+    // C — jump to crate (from any level except parameter/editing)
+    if (event.key === 'c' && navLevel !== 'parameter' && navLevel !== 'workshop-parameter') {
+      if (navLevel === 'crate' || navLevel === 'crate-role') return; // already there
+      if (navLevel === 'workshop' || navLevel === 'workshop-variant') closeWorkshop();
+      setNavLevel('crate');
+      setCrateRoleIndex(0);
+      return;
+    }
+
+    // W — jump to workshop (from any level except parameter/editing)
+    if (event.key === 'w' && navLevel !== 'parameter' && navLevel !== 'workshop-parameter') {
+      if (navLevel === 'workshop' || navLevel === 'workshop-variant') return; // already there
+      openWorkshop();
+      setNavLevel('workshop');
+      setWorkshopTabIndex(0);
+      return;
+    }
+
     // 1-8: stage + lane + crate levels only (not parameter, not workshop)
     if (/^[1-8]$/.test(event.key) && (navLevel === 'stage' || navLevel === 'lane' || navLevel === 'crate' || navLevel === 'crate-role')) {
       const idx = parseInt(event.key, 10) - 1;
@@ -437,11 +455,6 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
             setWorkshopTabIndex(0);
           }
           break;
-        case 'w':
-          closeWorkshop();
-          setNavLevel('stage');
-          setWorkshopTabIndex(0);
-          break;
       }
       return;
     }
@@ -470,11 +483,6 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
         }
         break;
       }
-      case 'w':
-        openWorkshop();
-        setNavLevel('workshop');
-        setWorkshopTabIndex(workshopRoleCount);
-        break;
       case 'm':
         if (selectedLayerId) toggleMute(selectedLayerId);
         break;

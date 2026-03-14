@@ -1,25 +1,22 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { CrateVoice, VoiceRole } from '../types';
 import type { NavLevel } from '../hooks/useTreeNav';
-import { VOICE_LIBRARY } from '../lib/voiceLibrary';
-import { createBlankWorkshopVoice } from '../lib/workshopSeeds';
+import { CRATE_ROLES } from '../hooks/useTreeNav';
 import { generateRowGrid } from './Punchcard';
-import { CodeDisplay } from './InteractiveCode';
-
-const FILTERED_ROLES: VoiceRole[] = ['kick', 'hats', 'bass', 'pad', 'texture', 'fx'];
+import { createBlankWorkshopVoice } from '../lib/workshopSeeds';
 
 interface Props {
-  role: VoiceRole | 'all';
-  seedVoice: CrateVoice | null;
   crate: CrateVoice[];
+  stagedVoiceNames: Set<string>;
   previewingId: string | null;
   navLevel: NavLevel;
   workshopTabIndex: number;
   onClose: () => void;
-  onChangeRole: (role: VoiceRole) => void;
   onPreview: (voice: CrateVoice) => void;
-  onSaveToCrate: (voice: CrateVoice) => void;
   onAddToStage: (voice: CrateVoice) => void;
+  onRemoveFromCrate: (voiceId: string) => void;
+  onAddToCrate: (voice: CrateVoice) => void;
+  onUpdateCrateVoice: (voiceId: string, code: string) => void;
 }
 
 function PulsePreview({ code }: { code: string }) {
@@ -29,7 +26,7 @@ function PulsePreview({ code }: { code: string }) {
       {grid.map((active, index) => (
         <div
           key={index}
-          className="h-3 flex-1"
+          className="h-2 flex-1"
           style={{ background: active ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.05)' }}
         />
       ))}
@@ -37,226 +34,217 @@ function PulsePreview({ code }: { code: string }) {
   );
 }
 
-function dedupeVoices(voices: CrateVoice[]): CrateVoice[] {
-  const seen = new Set<string>();
-  return voices.filter((voice) => {
-    const key = `${voice.role}:${voice.name}:${voice.code}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function shuffle<T>(items: T[], seed: number): T[] {
-  const values = [...items];
-  let cursor = seed || 1;
-  for (let i = values.length - 1; i > 0; i -= 1) {
-    cursor = (cursor * 1664525 + 1013904223) % 4294967296;
-    const j = cursor % (i + 1);
-    [values[i], values[j]] = [values[j], values[i]];
-  }
-  return values;
-}
-
 export default function WorkshopOverlay({
-  role,
-  seedVoice,
   crate,
+  stagedVoiceNames,
   previewingId,
   navLevel,
   workshopTabIndex,
   onClose,
-  onChangeRole,
   onPreview,
-  onSaveToCrate,
   onAddToStage,
+  onRemoveFromCrate,
+  onAddToCrate,
+  onUpdateCrateVoice,
 }: Props) {
-  const [batch, setBatch] = useState(0);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedRole, setSelectedRole] = useState<VoiceRole>('kick');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editCode, setEditCode] = useState('');
 
-  const activeRole = role === 'all' ? 'bass' : role;
-
-  const pool = useMemo(() => {
-    const libraryVoices = VOICE_LIBRARY
-      .filter((voice) => voice.role === activeRole)
-      .map((voice) => ({
-        ...voice,
-        savedAt: Date.now(),
-        isFavorite: false,
-      }));
-
-    const crateVoices = crate.filter((voice) => voice.role === activeRole);
-    const combined = dedupeVoices([
-      ...(seedVoice && seedVoice.role === activeRole ? [seedVoice] : []),
-      ...crateVoices,
-      ...libraryVoices,
-    ]);
-
-    return shuffle(combined, batch + 1);
-  }, [activeRole, batch, crate, seedVoice]);
-
-  const visibleVoices = useMemo(() => (
-    pool.slice(0, Math.max(4, Math.min(6, pool.length)))
-  ), [pool]);
-
-  // Collapse expanded card when role changes
-  useEffect(() => {
-    setExpandedId(null);
-  }, [activeRole]);
-
-  // Sync keyboard highlight with role tabs — when tabbing across roles, update the active role
-  useEffect(() => {
-    if (navLevel === 'workshop' && workshopTabIndex < FILTERED_ROLES.length) {
-      const tabRole = FILTERED_ROLES[workshopTabIndex];
-      if (tabRole && tabRole !== activeRole) {
-        onChangeRole(tabRole);
-      }
+  const crateByRole = useMemo(() => {
+    const map: Record<string, CrateVoice[]> = {};
+    for (const role of CRATE_ROLES) map[role] = [];
+    for (const voice of crate) {
+      if (map[voice.role]) map[voice.role].push(voice);
     }
-  }, [navLevel, workshopTabIndex, activeRole, onChangeRole]);
+    return map;
+  }, [crate]);
+
+  const roleVoices = crateByRole[selectedRole] || [];
+
+  const startEditing = (voice: CrateVoice) => {
+    setEditingId(voice.id);
+    setEditCode(voice.code);
+  };
+
+  const saveEdit = () => {
+    if (editingId && editCode.trim()) {
+      onUpdateCrateVoice(editingId, editCode);
+    }
+    setEditingId(null);
+    setEditCode('');
+  };
+
+  const addNewVoice = () => {
+    const blank = createBlankWorkshopVoice(selectedRole);
+    onAddToCrate(blank);
+    startEditing(blank);
+  };
 
   return (
     <div style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)' }}>
+      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.15)' }}>
         <div className="text-sm font-bold tracking-[0.18em] text-white">WORKSHOP</div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="px-3 py-1 text-[11px] cursor-pointer"
-          style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
-        >
-          close (esc)
-        </button>
+        <div className="flex items-center gap-3 text-[10px]">
+          <span style={{ color: 'rgba(255,255,255,0.25)' }}>esc to close</span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1 cursor-pointer"
+            style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
+          >
+            close
+          </button>
+        </div>
       </div>
 
-      <div className="px-4 py-3 flex flex-wrap items-center gap-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-        {FILTERED_ROLES.map((voiceRole, idx) => {
-          const isKeyHighlighted = navLevel === 'workshop' && workshopTabIndex === idx;
-          const isActive = activeRole === voiceRole;
-          return (
-            <button
-              key={voiceRole}
-              type="button"
-              onClick={() => onChangeRole(voiceRole)}
-              className="px-2.5 py-1 text-[10px] cursor-pointer"
-              style={{
-                border: isKeyHighlighted
-                  ? '2px solid rgba(136,255,136,0.5)'
-                  : `1px solid ${isActive ? 'rgba(136,255,136,0.18)' : 'rgba(255,255,255,0.06)'}`,
-                color: isKeyHighlighted || isActive ? '#88ff88' : 'rgba(255,255,255,0.35)',
-                background: isKeyHighlighted ? 'rgba(136,255,136,0.08)' : 'transparent',
-              }}
-            >
-              {voiceRole}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="p-4">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {visibleVoices.map((voice, idx) => {
-            const isHighlighted = navLevel === 'workshop' && workshopTabIndex === FILTERED_ROLES.length + idx;
-            const isExpanded = expandedId === voice.id;
-            const isPreviewing = previewingId === voice.id;
-
+      <div className="flex" style={{ minHeight: '300px' }}>
+        {/* Left: role list */}
+        <div className="shrink-0 w-[120px]" style={{ borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+          {CRATE_ROLES.map((role, idx) => {
+            const isSelected = selectedRole === role;
+            const count = (crateByRole[role] || []).length;
+            const isHighlighted = navLevel === 'workshop' && workshopTabIndex === idx;
             return (
-              <div
-                key={voice.id}
-                className={isExpanded ? 'md:col-span-2 xl:col-span-3' : ''}
+              <button
+                key={role}
+                type="button"
+                onClick={() => setSelectedRole(role)}
+                className="w-full text-left px-3 py-2 text-[11px] cursor-pointer transition-colors"
+                style={{
+                  color: isHighlighted || isSelected ? '#88ff88' : 'rgba(255,255,255,0.4)',
+                  background: isHighlighted
+                    ? 'rgba(136,255,136,0.08)'
+                    : isSelected
+                      ? 'rgba(255,255,255,0.03)'
+                      : 'transparent',
+                  borderLeft: isHighlighted
+                    ? '3px solid #88ff88'
+                    : isSelected
+                      ? '3px solid rgba(136,255,136,0.3)'
+                      : '3px solid transparent',
+                }}
               >
-                <button
-                  type="button"
-                  onClick={() => setExpandedId(isExpanded ? null : voice.id)}
-                  className="w-full text-left p-3 cursor-pointer transition-all"
+                {role}
+                <span className="ml-2" style={{ color: 'rgba(255,255,255,0.2)' }}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Right: voices for selected role */}
+        <div className="flex-1 p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              {selectedRole} · {roleVoices.length} voices
+            </div>
+            <button
+              type="button"
+              onClick={addNewVoice}
+              className="px-3 py-1 text-[10px] cursor-pointer"
+              style={{ border: '1px solid rgba(136,255,136,0.25)', color: '#88ff88' }}
+            >
+              + new {selectedRole}
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {roleVoices.map((voice, idx) => {
+              const isStaged = stagedVoiceNames.has(voice.name);
+              const isPreviewing = previewingId === voice.id;
+              const isEditing = editingId === voice.id;
+              const cardHighlighted = navLevel === 'workshop' && workshopTabIndex === CRATE_ROLES.length + idx;
+
+              return (
+                <div
+                  key={voice.id}
                   style={{
-                    border: isHighlighted
-                      ? '2px solid rgba(136,255,136,0.5)'
-                      : isExpanded
+                    border: cardHighlighted
+                      ? '2px solid rgba(136,255,136,0.4)'
+                      : isEditing
                         ? '1px solid rgba(136,255,136,0.2)'
                         : '1px solid rgba(255,255,255,0.08)',
-                    background: isHighlighted
+                    background: cardHighlighted
                       ? 'rgba(136,255,136,0.06)'
-                      : isExpanded
+                      : isEditing
                         ? 'rgba(136,255,136,0.03)'
                         : 'rgba(255,255,255,0.02)',
                   }}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-white">{voice.name}</div>
-                    <div className="flex items-center gap-2">
+                  {/* Voice header */}
+                  <div className="flex items-center gap-3 px-3 py-2">
+                    <span className="text-[12px] text-white">{voice.name}</span>
+                    {isStaged && <span className="text-[9px]" style={{ color: 'rgba(136,255,136,0.5)' }}>staged</span>}
+                    <div className="flex-1" />
+                    <button
+                      type="button"
+                      onClick={() => onPreview(voice)}
+                      className="px-2 py-0.5 text-[10px] cursor-pointer"
+                      style={{
+                        border: `1px solid ${isPreviewing ? 'rgba(136,255,136,0.2)' : 'rgba(255,255,255,0.08)'}`,
+                        color: isPreviewing ? '#88ff88' : 'rgba(255,255,255,0.6)',
+                      }}
+                    >
+                      {isPreviewing ? '■ stop' : '▶'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => isEditing ? saveEdit() : startEditing(voice)}
+                      className="px-2 py-0.5 text-[10px] cursor-pointer"
+                      style={{ border: '1px solid rgba(255,255,255,0.08)', color: isEditing ? '#88ff88' : 'rgba(255,255,255,0.6)' }}
+                    >
+                      {isEditing ? 'save' : 'edit'}
+                    </button>
+                    {!isStaged && (
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onPreview(voice);
-                        }}
-                        className="px-2.5 py-1 text-[10px] cursor-pointer"
-                        style={{
-                          border: `1px solid ${isPreviewing ? 'rgba(136,255,136,0.18)' : 'rgba(255,255,255,0.08)'}`,
-                          color: isPreviewing ? '#88ff88' : '#ffffff',
-                        }}
-                      >
-                        {isPreviewing ? '■ stop' : '▶ preview'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAddToStage(voice);
-                        }}
-                        className="px-2.5 py-1 text-[10px] cursor-pointer"
+                        onClick={() => onAddToStage(voice)}
+                        className="px-2 py-0.5 text-[10px] cursor-pointer"
                         style={{ border: '1px solid rgba(136,255,136,0.15)', color: '#88ff88' }}
                       >
                         stage
                       </button>
-                    </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onRemoveFromCrate(voice.id)}
+                      className="px-2 py-0.5 text-[10px] cursor-pointer"
+                      style={{ border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.25)' }}
+                    >
+                      ×
+                    </button>
                   </div>
-                  <div className="mt-3">
-                    <PulsePreview code={voice.code} />
-                  </div>
-                </button>
 
-                {isExpanded && (
-                  <div
-                    className="p-3 mt-[-1px]"
-                    style={{
-                      border: '1px solid rgba(136,255,136,0.2)',
-                      borderTop: 'none',
-                      background: 'rgba(0,0,0,0.15)',
-                    }}
-                  >
-                    <CodeDisplay
-                      code={voice.code}
-                      onSoundChange={() => {}}
-                    />
-                    <div className="mt-3 flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onSaveToCrate(voice)}
-                        className="px-2.5 py-1 text-[10px] cursor-pointer"
-                        style={{ border: '1px solid rgba(255,255,255,0.08)', color: '#ffffff' }}
-                      >
-                        + crate
-                      </button>
-                    </div>
+                  {/* Pulse preview (always visible) */}
+                  <div className="px-3 pb-2">
+                    <PulsePreview code={isEditing ? editCode : voice.code} />
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-4 flex items-center justify-center">
-          <button
-            type="button"
-            onClick={() => {
-              setExpandedId(null);
-              setBatch((value) => value + 1);
-            }}
-            className="px-4 py-2 text-[11px] cursor-pointer"
-            style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
-          >
-            ↻ more
-          </button>
+
+                  {/* Code editor (when editing) */}
+                  {isEditing && (
+                    <div className="px-3 pb-3">
+                      <textarea
+                        value={editCode}
+                        onChange={(e) => setEditCode(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            saveEdit();
+                          }
+                        }}
+                        className="w-full min-h-[100px] resize-y bg-transparent outline-none text-sm leading-relaxed"
+                        style={{ color: '#ffffff', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 10px' }}
+                        spellCheck={false}
+                        autoFocus
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
