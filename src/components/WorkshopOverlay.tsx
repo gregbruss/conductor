@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CrateVoice, VoiceRole } from '../types';
+import type { NavLevel } from '../hooks/useTreeNav';
 import { VOICE_LIBRARY, VOICE_ROLES } from '../lib/voiceLibrary';
 import { createBlankWorkshopVoice } from '../lib/workshopSeeds';
 import { generateRowGrid } from './Punchcard';
@@ -7,11 +8,15 @@ import { CodeDisplay, SliderRow, updateSoundInCode, updateSliderInCode } from '.
 
 type WorkshopRole = VoiceRole | 'all';
 
+const FILTERED_ROLES: VoiceRole[] = ['kick', 'hats', 'bass', 'pad', 'texture', 'fx'];
+
 interface Props {
   role: WorkshopRole;
   seedVoice: CrateVoice | null;
   crate: CrateVoice[];
   previewingId: string | null;
+  navLevel: NavLevel;
+  workshopTabIndex: number;
   onClose: () => void;
   onChangeRole: (role: VoiceRole) => void;
   onPreview: (voice: CrateVoice) => void;
@@ -58,6 +63,7 @@ function shuffle<T>(items: T[], seed: number): T[] {
 function CandidateCard({
   voice,
   previewing,
+  highlighted,
   onPreview,
   onStage,
   onSelect,
@@ -65,6 +71,7 @@ function CandidateCard({
 }: {
   voice: CrateVoice;
   previewing: boolean;
+  highlighted: boolean;
   onPreview: () => void;
   onStage: () => void;
   onSelect: () => void;
@@ -76,8 +83,8 @@ function CandidateCard({
       onClick={onSelect}
       className="text-left p-3 cursor-pointer transition-all"
       style={{
-        border: '1px solid rgba(255,255,255,0.08)',
-        background: 'rgba(255,255,255,0.02)',
+        border: highlighted ? '2px solid rgba(136,255,136,0.5)' : '1px solid rgba(255,255,255,0.08)',
+        background: highlighted ? 'rgba(136,255,136,0.06)' : 'rgba(255,255,255,0.02)',
       }}
     >
       <div className="text-sm text-white">{voice.name}</div>
@@ -131,6 +138,8 @@ export default function WorkshopOverlay({
   seedVoice,
   crate,
   previewingId,
+  navLevel,
+  workshopTabIndex,
   onClose,
   onChangeRole,
   onPreview,
@@ -218,36 +227,47 @@ export default function WorkshopOverlay({
       </div>
 
       <div className="px-4 py-3 flex flex-wrap items-center gap-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-        {VOICE_ROLES.filter(({ role: voiceRole }) => ['kick', 'hats', 'bass', 'pad', 'texture', 'fx'].includes(voiceRole)).map(({ role: voiceRole }) => (
-          <button
-            key={voiceRole}
-            type="button"
-            onClick={() => onChangeRole(voiceRole)}
-            className="px-2.5 py-1 text-[10px] cursor-pointer"
-            style={{
-              border: `1px solid ${activeRole === voiceRole ? 'rgba(136,255,136,0.18)' : 'rgba(255,255,255,0.06)'}`,
-              color: activeRole === voiceRole ? '#88ff88' : 'rgba(255,255,255,0.35)',
-            }}
-          >
-            {voiceRole}
-          </button>
-        ))}
+        {FILTERED_ROLES.map((voiceRole, idx) => {
+          const isKeyHighlighted = navLevel === 'workshop' && workshopTabIndex === idx;
+          const isActive = activeRole === voiceRole;
+          return (
+            <button
+              key={voiceRole}
+              type="button"
+              onClick={() => onChangeRole(voiceRole)}
+              className="px-2.5 py-1 text-[10px] cursor-pointer"
+              style={{
+                border: isKeyHighlighted
+                  ? '2px solid rgba(136,255,136,0.5)'
+                  : `1px solid ${isActive ? 'rgba(136,255,136,0.18)' : 'rgba(255,255,255,0.06)'}`,
+                color: isKeyHighlighted || isActive ? '#88ff88' : 'rgba(255,255,255,0.35)',
+                background: isKeyHighlighted ? 'rgba(136,255,136,0.08)' : 'transparent',
+              }}
+            >
+              {voiceRole}
+            </button>
+          );
+        })}
       </div>
 
       {!selectedVoice ? (
         <div className="p-4">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {visibleVoices.map((voice) => (
-              <CandidateCard
-                key={voice.id}
-                voice={voice}
-                previewing={previewingId === voice.id}
-                onPreview={() => onPreview(voice)}
-                onStage={() => onAddToStage(voice)}
-                onSelect={() => selectCandidate(voice)}
-                onSaveToCrate={() => onSaveToCrate(voice)}
-              />
-            ))}
+            {visibleVoices.map((voice, idx) => {
+              const cardHighlighted = navLevel === 'workshop' && workshopTabIndex === FILTERED_ROLES.length + idx;
+              return (
+                <CandidateCard
+                  key={voice.id}
+                  voice={voice}
+                  previewing={previewingId === voice.id}
+                  highlighted={cardHighlighted}
+                  onPreview={() => onPreview(voice)}
+                  onStage={() => onAddToStage(voice)}
+                  onSelect={() => selectCandidate(voice)}
+                  onSaveToCrate={() => onSaveToCrate(voice)}
+                />
+              );
+            })}
           </div>
           <div className="mt-4 flex items-center justify-center">
             <button

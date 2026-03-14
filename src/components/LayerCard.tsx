@@ -3,6 +3,7 @@ import type { Layer } from '../types';
 import { CodeDisplay, SliderRow } from './InteractiveCode';
 import { generateRowGrid } from './Punchcard';
 import { findAdjustableLines } from '../lib/codeNudge';
+import type { NavLevel } from '../hooks/useTreeNav';
 
 interface Props {
   layer: Layer;
@@ -17,8 +18,8 @@ interface Props {
   isMuted: boolean;
   isSoloed: boolean;
   isSelected: boolean;
-  focusMode: boolean;
-  focusedParamIndex: number;
+  navLevel: NavLevel;
+  lineIndex: number;
   isPlaying: boolean;
   bpm: number;
   disabled?: boolean;
@@ -102,30 +103,70 @@ function PulseStrip({
   return <canvas ref={canvasRef} className="block w-full" style={{ height: '18px' }} />;
 }
 
-function FocusCodeView({ code, focusedParamIndex }: { code: string; focusedParamIndex: number }) {
+function LineNavCodeView({ code, lineIndex, isParameterActive }: {
+  code: string;
+  lineIndex: number;
+  isParameterActive: boolean;
+}) {
   const lines = code.split('\n');
   const adjustable = findAdjustableLines(code);
-  const focusedLineIndex = adjustable[focusedParamIndex]?.lineIndex ?? -1;
 
   return (
     <div className="text-sm leading-relaxed" style={{ fontFamily: 'monospace' }}>
       {lines.map((line, i) => {
-        const isFocused = i === focusedLineIndex;
+        const isFocused = i === lineIndex;
         const param = adjustable.find((a) => a.lineIndex === i);
+        const isAdj = !!param;
+
         return (
           <div
             key={i}
-            className="px-2 py-0.5 flex items-center gap-3"
+            className="px-2 py-1 flex items-center gap-3 transition-colors"
             style={{
               background: isFocused ? 'rgba(136,255,136,0.12)' : 'transparent',
               borderLeft: isFocused ? '3px solid #88ff88' : '3px solid transparent',
             }}
           >
-            <span style={{ color: isFocused ? '#ffffff' : 'rgba(255,255,255,0.7)' }}>{line}</span>
-            {isFocused && param && (
-              <span className="text-[10px] ml-auto shrink-0" style={{ color: '#88ff88' }}>
-                ← {param.label}: {param.value.toFixed(param.max >= 100 ? 0 : 2)}
-              </span>
+            {isFocused && isAdj && isParameterActive ? (
+              <>
+                <span style={{ color: '#88ff88' }}>.{param.label}(</span>
+                <div className="flex-1 flex items-center gap-2">
+                  <div className="flex-1 h-2 relative" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                    <div
+                      className="absolute top-0 left-0 h-full"
+                      style={{
+                        background: '#88ff88',
+                        width: `${((param.value - param.min) / (param.max - param.min)) * 100}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="text-[11px] shrink-0" style={{ color: '#88ff88', minWidth: '4ch' }}>
+                    {param.max >= 100 ? Math.round(param.value) : param.value.toFixed(2)}
+                  </span>
+                </div>
+                <span style={{ color: '#88ff88' }}>)</span>
+              </>
+            ) : (
+              <>
+                <span style={{ color: isFocused ? '#ffffff' : (isAdj ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.5)') }}>
+                  {line}
+                </span>
+                {isAdj && !isFocused && (
+                  <span className="text-[9px] ml-auto shrink-0" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                    {param.label} {param.max >= 100 ? Math.round(param.value) : param.value.toFixed(2)}
+                  </span>
+                )}
+                {isFocused && isAdj && (
+                  <span className="text-[10px] ml-auto shrink-0" style={{ color: '#88ff88' }}>
+                    ↵ {param.label}: {param.max >= 100 ? Math.round(param.value) : param.value.toFixed(2)}
+                  </span>
+                )}
+                {isFocused && !isAdj && (
+                  <span className="text-[9px] ml-auto shrink-0" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                    —
+                  </span>
+                )}
+              </>
             )}
           </div>
         );
@@ -147,8 +188,8 @@ export default function LayerCard({
   isMuted,
   isSoloed,
   isSelected,
-  focusMode,
-  focusedParamIndex,
+  navLevel,
+  lineIndex: navLineIndex,
   isPlaying,
   bpm,
   disabled,
@@ -189,12 +230,12 @@ export default function LayerCard({
           {index + 1}
         </span>
         <span className="text-sm text-white">{layer.label}</span>
-        {focusMode && (
+        {(navLevel === 'lane' || navLevel === 'parameter') && (
           <span className="text-[9px] uppercase tracking-[0.18em]" style={{ color: '#88ff88' }}>
-            focus · ↑↓ nudge · tab next · esc exit
+            {navLevel === 'parameter' ? '←→ adjust · tab next · esc back' : 'tab line · enter adjust · esc back'}
           </span>
         )}
-        {isEditing && !focusMode && (
+        {isEditing && navLevel === 'stage' && (
           <span className="text-[9px] uppercase tracking-[0.18em]" style={{ color: 'rgba(255,255,255,0.22)' }}>
             editing
           </span>
@@ -261,8 +302,8 @@ export default function LayerCard({
                 }}
                 spellCheck={false}
               />
-            ) : focusMode ? (
-              <FocusCodeView code={layer.code} focusedParamIndex={focusedParamIndex} />
+            ) : (navLevel === 'lane' || navLevel === 'parameter') ? (
+              <LineNavCodeView code={layer.code} lineIndex={navLineIndex} isParameterActive={navLevel === 'parameter'} />
             ) : (
               <button
                 type="button"
@@ -289,14 +330,6 @@ export default function LayerCard({
             />
           </div>
 
-          <div className="px-4 pl-8 py-3" onClick={(event) => event.stopPropagation()}>
-            <SliderRow
-              code={layer.code}
-              onSliderChange={onSliderChange}
-              sliderOffset={sliderOffset}
-              disabled={disabled}
-            />
-          </div>
         </>
       ) : (
         <div className="px-4 pb-3 pl-8 text-[11px] tracking-[0.18em]" style={{ color: 'rgba(255,255,255,0.22)' }}>

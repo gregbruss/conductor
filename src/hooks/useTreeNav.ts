@@ -7,35 +7,28 @@ import { findAdjustableLines, nudgeLineValue } from '../lib/codeNudge';
 
 export type NavLevel =
   | 'stage'
+  | 'crate'
   | 'lane'
   | 'parameter'
   | 'workshop'
   | 'workshop-variant'
   | 'workshop-parameter';
 
-type TargetKind = 'lane' | 'crate' | 'workshop-button';
+type TargetKind = 'lane' | 'crate';
 
 // --- Ring helpers ---
+// Stage ring: [lane0, ..., laneN, CRATE]
 
-function ringSize(layerCount: number, crateCount: number): number {
-  return layerCount + crateCount + 1;
+function stageRingSize(layerCount: number): number {
+  return layerCount + 1; // +1 for crate
 }
 
-function targetKind(index: number, layerCount: number, crateCount: number): TargetKind {
+function getTargetKind(index: number, layerCount: number): TargetKind {
   if (index < layerCount) return 'lane';
-  if (index < layerCount + crateCount) return 'crate';
-  return 'workshop-button';
+  return 'crate';
 }
 
-function laneIndex(stageIndex: number): number {
-  return stageIndex;
-}
-
-function crateIndex(stageIndex: number, layerCount: number): number {
-  return stageIndex - layerCount;
-}
-
-function wrapIndex(current: number, delta: number, size: number): number {
+function wrap(current: number, delta: number, size: number): number {
   if (size <= 0) return 0;
   return ((current + delta) % size + size) % size;
 }
@@ -48,7 +41,6 @@ interface UseTreeNavParams {
   stagedVoiceNames: Set<string>;
   workshopVisibleCount: number;
   workshopRoleCount: number;
-  // Callbacks
   toggleMute: (id: string) => void;
   toggleSolo: (id: string) => void;
   removeLayer: (id: string) => Promise<void>;
@@ -72,17 +64,17 @@ export interface TreeNavState {
   stageIndex: number;
   lineIndex: number;
   workshopTabIndex: number;
-  // Derived
   selectedLayerId: string | null;
   selectedLaneIndex: number;
   workshopOpen: boolean;
   isParameterActive: boolean;
   stageTargetKind: TargetKind;
-  crateHighlightIndex: number;
-  workshopButtonHighlighted: boolean;
+  crateIsOpen: boolean;
+  crateNavIndex: number;
+  crateHighlighted: boolean;
 }
 
-export function useTreeNav(params: UseTreeNavParams): TreeNavState & { handleKeyDown: (e: KeyboardEvent) => void } {
+export function useTreeNav(params: UseTreeNavParams): TreeNavState {
   const {
     layers, crate, stagedVoiceNames,
     workshopVisibleCount, workshopRoleCount,
@@ -96,69 +88,87 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState & { handleKey
   } = params;
 
   const [navLevel, setNavLevel] = useState<NavLevel>('stage');
-  const [stageIndex, setStageIndex] = useState(0);
+  const [stageIndex, setStageIndex] = useState(-1); // -1 = nothing selected yet
   const [lineIndex, setLineIndex] = useState(0);
+  const [crateNavIndex, setCrateNavIndex] = useState(0);
   const [workshopTabIndex, setWorkshopTabIndex] = useState(0);
+  const [lastLaneId, setLastLaneId] = useState<string | null>(null);
 
   const layerCount = layers.length;
   const crateCount = crate.length;
-  const stageSize = ringSize(layerCount, crateCount);
+  const stageSize = stageRingSize(layerCount);
   const workshopRingSize = workshopRoleCount + workshopVisibleCount;
 
   // Clamp stageIndex when layers/crate change
   useEffect(() => {
     setStageIndex((prev) => {
-      if (stageSize <= 0) return 0;
+      if (prev < 0) return prev; // keep -1 (nothing selected)
+      if (stageSize <= 0) return -1;
       return Math.min(prev, stageSize - 1);
     });
   }, [stageSize]);
 
   // Derived values
-  const stageTargetKindValue = targetKind(stageIndex, layerCount, crateCount);
+  const kind = stageIndex < 0 ? null : getTargetKind(stageIndex, layerCount);
 
   const selectedLayerId = useMemo(() => {
-    if (stageTargetKindValue === 'lane' && stageIndex < layerCount) {
+    if (kind === 'lane' && stageIndex >= 0 && stageIndex < layerCount) {
       return layers[stageIndex]?.id ?? null;
     }
     return null;
-  }, [stageTargetKindValue, stageIndex, layerCount, layers]);
+  }, [kind, stageIndex, layerCount, layers]);
+
+  // Reset lineIndex when switching to a different lane
+  useEffect(() => {
+    if (selectedLayerId && selectedLayerId !== lastLaneId) {
+      setLineIndex(0);
+      setLastLaneId(selectedLayerId);
+    }
+  }, [selectedLayerId, lastLaneId]);
 
   const workshopOpen = navLevel === 'workshop' || navLevel === 'workshop-variant' || navLevel === 'workshop-parameter';
   const isParameterActive = navLevel === 'parameter' || navLevel === 'workshop-parameter';
-
-  const crateHighlightIndex = navLevel === 'stage' && stageTargetKindValue === 'crate'
-    ? crateIndex(stageIndex, layerCount) : -1;
-
-  const workshopButtonHighlighted = navLevel === 'stage' && stageTargetKindValue === 'workshop-button';
+  const crateIsOpen = navLevel === 'crate';
+  const crateHighlighted = navLevel === 'stage' && stageIndex >= 0 && kind === 'crate';
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return;
 
-    // Cmd/Ctrl+Z for undo — global
+    // --- GLOBAL KEYS (all levels) ---
+
     if ((event.metaKey || event.ctrlKey) && event.key === 'z') {
       event.preventDefault();
       undo();
       return;
     }
 
-    // Space for play/stop — global (except in parameter mode to avoid conflicts)
-    if (event.key === ' ' && navLevel !== 'parameter' && navLevel !== 'workshop-parameter') {
+    if (event.key === ' ') {
       event.preventDefault();
       if (isPlaying) handleStop();
       else void handlePlay();
       return;
     }
 
-    // R for record — global
-    if (event.key === 'r' && navLevel !== 'parameter' && navLevel !== 'workshop-parameter') {
+    if (event.key === 'r') {
       void handleRecordToggle();
       return;
     }
 
-    // === PARAMETER LEVEL ===
+    // 1-8: stage + lane + crate levels only (not parameter, not workshop)
+    if (/^[1-8]$/.test(event.key) && (navLevel === 'stage' || navLevel === 'lane' || navLevel === 'crate')) {
+      const idx = parseInt(event.key, 10) - 1;
+      if (idx < layerCount) {
+        setNavLevel('stage');
+        setStageIndex(idx);
+      }
+      return;
+    }
+
+    // --- PARAMETER LEVEL ---
     if (navLevel === 'parameter') {
       const layer = layers.find((l) => l.id === selectedLayerId);
-      if (!layer) return;
+      if (!layer) { setNavLevel('stage'); return; }
+      const adjustable = findAdjustableLines(layer.code);
 
       switch (event.key) {
         case 'ArrowLeft':
@@ -175,23 +185,37 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState & { handleKey
           void updateLayerCode(layer.id, nudged);
           break;
         }
+        case 'Tab': {
+          // At parameter level, Tab jumps between ADJUSTABLE lines only
+          event.preventDefault();
+          if (adjustable.length <= 1) break;
+          const currentAdjIdx = adjustable.findIndex((a) => a.lineIndex === lineIndex);
+          const nextAdjIdx = wrap(currentAdjIdx, event.shiftKey ? -1 : 1, adjustable.length);
+          setLineIndex(adjustable[nextAdjIdx].lineIndex);
+          break;
+        }
         case 'Escape':
           setNavLevel('lane');
+          break;
+        case 'm':
+          if (selectedLayerId) toggleMute(selectedLayerId);
           break;
       }
       return;
     }
 
-    // === WORKSHOP-PARAMETER LEVEL ===
+    // --- WORKSHOP-PARAMETER LEVEL ---
     if (navLevel === 'workshop-parameter') {
-      if (event.key === 'Escape') {
-        setNavLevel('workshop-variant');
+      switch (event.key) {
+        case 'Escape':
+          setNavLevel('workshop-variant');
+          break;
+        // Arrow adjustments for workshop params handled by WorkshopOverlay via props
       }
-      // Arrow adjustments for workshop params will be handled by WorkshopOverlay
       return;
     }
 
-    // === LANE LEVEL ===
+    // --- LANE LEVEL ---
     if (navLevel === 'lane') {
       const layer = layers.find((l) => l.id === selectedLayerId);
       if (!layer) { setNavLevel('stage'); return; }
@@ -201,21 +225,19 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState & { handleKey
       switch (event.key) {
         case 'Tab': {
           event.preventDefault();
-          const delta = event.shiftKey ? -1 : 1;
-          setLineIndex((prev) => wrapIndex(prev, delta, codeLines.length));
+          setLineIndex((prev) => wrap(prev, event.shiftKey ? -1 : 1, codeLines.length));
           break;
         }
         case 'Enter': {
           event.preventDefault();
-          const isAdj = adjustable.some((a) => a.lineIndex === lineIndex);
-          if (isAdj) {
+          if (adjustable.some((a) => a.lineIndex === lineIndex)) {
             setNavLevel('parameter');
           }
           break;
         }
         case 'Escape':
+          // Preserve lineIndex — don't reset
           setNavLevel('stage');
-          setLineIndex(0);
           break;
         case 'm':
           if (selectedLayerId) toggleMute(selectedLayerId);
@@ -226,21 +248,64 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState & { handleKey
           if (selectedLayerId) {
             void removeLayer(selectedLayerId);
             setNavLevel('stage');
-            setLineIndex(0);
           }
           break;
       }
       return;
     }
 
-    // === WORKSHOP-VARIANT LEVEL ===
+    // --- CRATE LEVEL (drawer open, arrow-navigate grid) ---
+    if (navLevel === 'crate') {
+      switch (event.key) {
+        case 'Tab':
+        case 'ArrowRight':
+          event.preventDefault();
+          if (crateCount > 0) {
+            setCrateNavIndex((prev) => wrap(prev, event.shiftKey ? -1 : 1, crateCount));
+          }
+          break;
+        case 'ArrowLeft':
+          event.preventDefault();
+          if (crateCount > 0) {
+            setCrateNavIndex((prev) => wrap(prev, -1, crateCount));
+          }
+          break;
+        case 'ArrowDown':
+          event.preventDefault();
+          setCrateNavIndex((prev) => Math.min(prev + 3, crateCount - 1));
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          setCrateNavIndex((prev) => Math.max(prev - 3, 0));
+          break;
+        case 'Enter': {
+          event.preventDefault();
+          const voice = crate[crateNavIndex];
+          if (voice) {
+            if (stagedVoiceNames.has(voice.name)) {
+              const layer = layers.find((l) => l.label === voice.name);
+              if (layer) void removeLayer(layer.id);
+            } else {
+              void appendVoiceToStage(voice.code, voice.name).then(() => {
+                setStageIndex(layerCount);
+                setNavLevel('stage');
+              });
+            }
+          }
+          break;
+        }
+        case 'Escape':
+          setNavLevel('stage');
+          break;
+      }
+      return;
+    }
+
+    // --- WORKSHOP-VARIANT LEVEL ---
     if (navLevel === 'workshop-variant') {
       switch (event.key) {
         case 'Tab':
           event.preventDefault();
-          // Tab through variant code lines — handled by lineIndex
-          // The workshop component will need to provide line count via the workshopVisibleCount mechanism
-          // For now, cycle lineIndex
           setLineIndex((prev) => prev + (event.shiftKey ? -1 : 1));
           break;
         case 'Enter':
@@ -253,6 +318,7 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState & { handleKey
           break;
         case 's':
           onWorkshopStageVariant();
+          setNavLevel('stage');
           break;
         case 'p':
           onWorkshopPreviewVariant();
@@ -261,21 +327,24 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState & { handleKey
       return;
     }
 
-    // === WORKSHOP LEVEL ===
+    // --- WORKSHOP LEVEL ---
     if (navLevel === 'workshop') {
       switch (event.key) {
         case 'Tab': {
           event.preventDefault();
           if (workshopRingSize > 0) {
-            setWorkshopTabIndex((prev) => wrapIndex(prev, event.shiftKey ? -1 : 1, workshopRingSize));
+            setWorkshopTabIndex((prev) => wrap(prev, event.shiftKey ? -1 : 1, workshopRingSize));
           }
           break;
         }
         case 'Enter': {
           event.preventDefault();
           if (workshopTabIndex < workshopRoleCount) {
+            // Enter on role tab: select role + jump to first variant
             onWorkshopChangeRole(workshopTabIndex);
+            setWorkshopTabIndex(workshopRoleCount); // jump to first variant
           } else {
+            // Enter on variant card: go into variant
             const variantIdx = workshopTabIndex - workshopRoleCount;
             onWorkshopSelectVariant(variantIdx);
             setNavLevel('workshop-variant');
@@ -283,7 +352,28 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState & { handleKey
           }
           break;
         }
+        case 'p': {
+          // Preview highlighted variant
+          if (workshopTabIndex >= workshopRoleCount) {
+            onWorkshopPreviewVariant();
+          }
+          break;
+        }
+        case 's': {
+          // Stage highlighted variant directly
+          if (workshopTabIndex >= workshopRoleCount) {
+            onWorkshopStageVariant();
+            setNavLevel('stage');
+          }
+          break;
+        }
+        case 'n': {
+          // Next batch
+          // Handled by workshop component via callback — for now just signal
+          break;
+        }
         case 'Escape':
+        case 'w':
           closeWorkshop();
           setNavLevel('stage');
           setWorkshopTabIndex(0);
@@ -292,50 +382,34 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState & { handleKey
       return;
     }
 
-    // === STAGE LEVEL ===
+    // --- STAGE LEVEL ---
     switch (event.key) {
       case 'Tab': {
         event.preventDefault();
         if (stageSize > 0) {
-          setStageIndex((prev) => wrapIndex(prev, event.shiftKey ? -1 : 1, stageSize));
+          setStageIndex((prev) => {
+            if (prev < 0) return 0; // first Tab selects first item
+            return wrap(prev, event.shiftKey ? -1 : 1, stageSize);
+          });
         }
         break;
       }
       case 'Enter': {
         event.preventDefault();
-        const kind = targetKind(stageIndex, layerCount, crateCount);
+        if (stageIndex < 0) break; // nothing selected
         if (kind === 'lane') {
           setNavLevel('lane');
-          setLineIndex(0);
-        } else if (kind === 'crate') {
-          const idx = crateIndex(stageIndex, layerCount);
-          const voice = crate[idx];
-          if (voice) {
-            if (stagedVoiceNames.has(voice.name)) {
-              // Remove from stage
-              const layer = layers.find((l) => l.label === voice.name);
-              if (layer) void removeLayer(layer.id);
-            } else {
-              void appendVoiceToStage(voice.code, voice.name);
-            }
-          }
         } else {
-          // workshop-button
-          openWorkshop();
-          setNavLevel('workshop');
-          setWorkshopTabIndex(0);
+          // crate
+          setNavLevel('crate');
+          setCrateNavIndex(0);
         }
         break;
       }
       case 'w':
-        if (workshopOpen) {
-          closeWorkshop();
-          setNavLevel('stage');
-        } else {
-          openWorkshop();
-          setNavLevel('workshop');
-          setWorkshopTabIndex(0);
-        }
+        openWorkshop();
+        setNavLevel('workshop');
+        setWorkshopTabIndex(workshopRoleCount);
         break;
       case 'm':
         if (selectedLayerId) toggleMute(selectedLayerId);
@@ -351,38 +425,30 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState & { handleKey
         }
         break;
       case 'Escape':
-        // Deselect — go to first item
-        setStageIndex(0);
+        setStageIndex(-1); // deselect everything
         break;
       case 'ArrowUp':
         event.preventDefault();
         if (stageSize > 0) {
-          setStageIndex((prev) => wrapIndex(prev, -1, stageSize));
+          setStageIndex((prev) => prev < 0 ? stageSize - 1 : wrap(prev, -1, stageSize));
         }
         break;
       case 'ArrowDown':
         event.preventDefault();
         if (stageSize > 0) {
-          setStageIndex((prev) => wrapIndex(prev, 1, stageSize));
+          setStageIndex((prev) => prev < 0 ? 0 : wrap(prev, 1, stageSize));
         }
         break;
-      default:
-        if (/^[1-8]$/.test(event.key)) {
-          const idx = parseInt(event.key, 10) - 1;
-          if (idx < stageSize) {
-            setStageIndex(idx);
-          }
-        }
     }
   }, [
     navLevel, stageIndex, lineIndex, workshopTabIndex,
-    layers, crate, layerCount, crateCount, stageSize,
-    workshopRingSize, workshopRoleCount,
+    layers, crate, layerCount, crateCount, crateNavIndex, stageSize,
+    workshopRingSize, workshopRoleCount, kind,
     selectedLayerId, stagedVoiceNames, isPlaying,
     toggleMute, toggleSolo, removeLayer,
     appendVoiceToStage, updateLayerCode,
     handlePlay, handleStop, handleRecordToggle,
-    undo, openWorkshop, closeWorkshop, workshopOpen,
+    undo, openWorkshop, closeWorkshop,
     onWorkshopChangeRole, onWorkshopSelectVariant,
     onWorkshopStageVariant, onWorkshopPreviewVariant,
   ]);
@@ -399,12 +465,12 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState & { handleKey
     lineIndex,
     workshopTabIndex,
     selectedLayerId,
-    selectedLaneIndex: stageTargetKindValue === 'lane' ? laneIndex(stageIndex) : -1,
+    selectedLaneIndex: kind === 'lane' && stageIndex >= 0 ? stageIndex : -1,
     workshopOpen,
     isParameterActive,
-    stageTargetKind: stageTargetKindValue,
-    crateHighlightIndex,
-    workshopButtonHighlighted,
-    handleKeyDown,
+    stageTargetKind: kind,
+    crateIsOpen,
+    crateNavIndex,
+    crateHighlighted,
   };
 }

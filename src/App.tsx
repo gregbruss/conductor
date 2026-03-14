@@ -7,7 +7,7 @@ import LandingPage from './components/LandingPage';
 import WorkshopOverlay from './components/WorkshopOverlay';
 import { parseLayers, reconstructCode } from './lib/parser';
 import { createCrateVoice, loadCrate, saveCrate } from './lib/crateStore';
-import { useTreeNav } from './hooks/useTreeNav';
+import { useTreeNav, type NavLevel } from './hooks/useTreeNav';
 import type { CrateVoice, VoiceRole } from './types';
 
 declare global {
@@ -267,9 +267,6 @@ export default function App() {
     const nextCode = `${base}\n\n// ${label}\n${voiceCode}`;
     if (code) setHistory((previous) => [...previous, code]);
     setCode(nextCode);
-    const nextLayers = parseLayers(nextCode).layers;
-    const nextId = nextLayers[nextLayers.length - 1]?.id ?? null;
-    setSelectedLayerId(nextId);
     if (!isPlayingRef.current) {
       const ok = await evalStrudel(nextCode, new Set(), null);
       if (ok) setIsPlaying(true);
@@ -301,7 +298,6 @@ export default function App() {
     const nextCode = reconstructCode(parsed.preamble, nextLayers, null);
     setHistory((previous) => [...previous, code]);
     setCode(nextCode);
-    setSelectedLayerId((current) => (current === layerId ? null : current));
     const nextMutedIds = new Set(mutedIds);
     nextMutedIds.delete(layerId);
     setMutedIds(nextMutedIds);
@@ -316,27 +312,6 @@ export default function App() {
         setIsPlaying(false);
       }
     }
-  };
-
-  const openWorkshop = (role?: VoiceRole, seedVoice?: CrateVoice | null) => {
-    setSavedTake(null);
-    const selectedLayer = layers.find((layer) => layer.id === selectedLayerId);
-    const inferredRole = guessRole(selectedLayer?.label || '', selectedLayer?.code || '') || 'bass';
-    setWorkshopRole(role ?? inferredRole);
-    if (seedVoice) {
-      setWorkshopSeedVoice(seedVoice);
-    } else if (selectedLayer) {
-      setWorkshopSeedVoice(createCrateVoice({
-        name: selectedLayer.label,
-        description: 'Shaping from stage',
-        role: inferredRole,
-        code: selectedLayer.code,
-        tags: [inferredRole, 'stage'],
-      }));
-    } else {
-      setWorkshopSeedVoice(null);
-    }
-    setWorkshopOpen(true);
   };
 
   const previewWorkshopVoice = async (voice: CrateVoice) => {
@@ -401,8 +376,6 @@ export default function App() {
     });
     setMutedIds(new Set());
     setSoloId(null);
-    setSelectedLayerId(null);
-    setWorkshopOpen(false);
     setCode('');
   };
 
@@ -410,8 +383,6 @@ export default function App() {
     setSavedTake(null);
     setMutedIds(new Set());
     setSoloId(null);
-    setSelectedLayerId(null);
-    setWorkshopOpen(false);
     setWorkshopSeedVoice(null);
     setPreviewVoice(null);
     setCode('');
@@ -420,11 +391,56 @@ export default function App() {
   const hasCode = !!code;
   const stagedVoiceNames = useMemo(() => new Set(layers.map((layer) => layer.label)), [layers]);
 
+  // Refs for callbacks that need current values without causing re-renders
+  const selectedLayerRef = useRef<string | null>(null);
+
+  const openWorkshopCb = useCallback(() => {
+    setSavedTake(null);
+    const selectedLayer = layers.find((layer) => layer.id === selectedLayerRef.current);
+    const inferredRole = guessRole(selectedLayer?.label || '', selectedLayer?.code || '') || 'bass';
+    setWorkshopRole(inferredRole);
+    if (selectedLayer) {
+      setWorkshopSeedVoice(createCrateVoice({
+        name: selectedLayer.label,
+        description: 'Shaping from stage',
+        role: inferredRole,
+        code: selectedLayer.code,
+        tags: [inferredRole, 'stage'],
+      }));
+    } else {
+      setWorkshopSeedVoice(null);
+    }
+  }, [layers]);
+
+  const undoCb = useCallback(() => {
+    if (history.length === 0) return;
+    const previous = history[history.length - 1];
+    setHistory((h) => h.slice(0, -1));
+    setCode(previous);
+    if (isPlayingRef.current && previous.trim()) {
+      void evalStrudel(previous, mutedIds, soloId);
+    } else if (!previous.trim()) {
+      try { window.hush(); } catch {}
+      setIsPlaying(false);
+    }
+    setStatusMessage('undo');
+  }, [history, mutedIds, soloId]);
+
+  const closeWorkshopCb = useCallback(() => {
+    setWorkshopSeedVoice(null);
+    void restoreStageAudio();
+  }, [restoreStageAudio]);
+
+  const changeRoleCb = useCallback((roleIndex: number) => {
+    const roles: VoiceRole[] = ['kick', 'hats', 'bass', 'pad', 'texture', 'fx'];
+    if (roleIndex < roles.length) setWorkshopRole(roles[roleIndex]);
+  }, []);
+
   const nav = useTreeNav({
     layers,
     crate,
     stagedVoiceNames,
-    workshopVisibleCount: 5,
+    workshopVisibleCount: 6,
     workshopRoleCount: 6,
     toggleMute,
     toggleSolo,
@@ -434,49 +450,18 @@ export default function App() {
     handlePlay,
     handleStop,
     handleRecordToggle: () => handleRecordToggle(),
-    undo: () => {
-      if (history.length === 0) return;
-      const previous = history[history.length - 1];
-      setHistory((h) => h.slice(0, -1));
-      setCode(previous);
-      if (isPlayingRef.current && previous.trim()) {
-        void evalStrudel(previous, mutedIds, soloId);
-      } else if (!previous.trim()) {
-        try { window.hush(); } catch {}
-        setIsPlaying(false);
-      }
-      setStatusMessage('undo');
-    },
-    openWorkshop: () => {
-      setSavedTake(null);
-      const selectedLayer = layers.find((layer) => layer.id === nav.selectedLayerId);
-      const inferredRole = guessRole(selectedLayer?.label || '', selectedLayer?.code || '') || 'bass';
-      setWorkshopRole(inferredRole);
-      if (selectedLayer) {
-        setWorkshopSeedVoice(createCrateVoice({
-          name: selectedLayer.label,
-          description: 'Shaping from stage',
-          role: inferredRole,
-          code: selectedLayer.code,
-          tags: [inferredRole, 'stage'],
-        }));
-      } else {
-        setWorkshopSeedVoice(null);
-      }
-    },
-    closeWorkshop: () => {
-      setWorkshopSeedVoice(null);
-      void restoreStageAudio();
-    },
-    onWorkshopChangeRole: (roleIndex) => {
-      const roles: VoiceRole[] = ['kick', 'hats', 'bass', 'pad', 'texture', 'fx'];
-      if (roleIndex < roles.length) setWorkshopRole(roles[roleIndex]);
-    },
+    undo: undoCb,
+    openWorkshop: openWorkshopCb,
+    closeWorkshop: closeWorkshopCb,
+    onWorkshopChangeRole: changeRoleCb,
     onWorkshopSelectVariant: () => {},
     onWorkshopStageVariant: () => {},
     onWorkshopPreviewVariant: () => {},
     isPlaying,
   });
+
+  // Keep ref in sync for callbacks
+  selectedLayerRef.current = nav.selectedLayerId;
 
 
   if (view === 'landing') {
@@ -492,37 +477,14 @@ export default function App() {
             {statusMessage && <span className="text-[10px]" style={{ color: '#88ff88' }}>{statusMessage}</span>}
             {error && <span className="text-[10px]" style={{ color: '#ff9d84' }}>{error}</span>}
           </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={isPlaying ? handleStop : () => void handlePlay()}
-              className="px-3 py-1.5 text-[11px] cursor-pointer"
-              style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
-            >
-              {isPlaying ? '▶▶' : '▶'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleRecordToggle()}
-              className="px-3 py-1.5 text-[11px] cursor-pointer"
-              style={{
-                border: '1px solid rgba(255,255,255,0.12)',
-                color: isRecording ? '#ff9d84' : '#ffffff',
-              }}
-            >
-              {isRecording ? '■ stop' : '● rec'}
-            </button>
+          <div className="flex items-center gap-3 text-[10px]">
+            {isPlaying && <span style={{ color: '#88ff88' }}>▶ playing</span>}
+            {isRecording && <span style={{ color: '#ff9d84' }}>● REC {formatDuration(recordSeconds)}</span>}
           </div>
         </div>
-        {isRecording && (
-          <div className="mt-2 text-[10px]" style={{ color: '#ff9d84' }}>
-            ● {formatDuration(recordSeconds)} REC
-          </div>
-        )}
       </div>
 
-      <div className="shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.15)' }}>
+      <div className="shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.15)', minHeight: '80px' }}>
         <div className="px-4 py-2 text-[10px] uppercase tracking-[0.2em]" style={{ color: 'rgba(255,255,255,0.35)' }}>
           score
         </div>
@@ -531,10 +493,10 @@ export default function App() {
             layers={layers}
             mutedIds={mutedIds}
             soloId={soloId}
-            focusedLayerId={selectedLayerId}
+            focusedLayerId={nav.selectedLayerId}
             isPlaying={isPlaying}
             bpm={bpm}
-            onFocusLayer={(id) => setSelectedLayerId((current) => (current === id ? null : id))}
+            onFocusLayer={() => {}}
             onToggleMute={toggleMute}
             onToggleSolo={toggleSolo}
           />
@@ -573,7 +535,7 @@ export default function App() {
               </div>
             </div>
           </div>
-        ) : workshopOpen ? (
+        ) : nav.workshopOpen ? (
           <div
             className="py-3"
             style={{ animation: 'workshopSlideIn 0.25s ease-out' }}
@@ -584,52 +546,32 @@ export default function App() {
                 to { opacity: 1; transform: translateY(0); }
               }
             `}</style>
-            {layers.length > 0 && (
-              <div className="mx-4 mb-3" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.1)' }}>
-                {layers.map((layer, index) => (
-                  <CompactStageLane
-                    key={layer.id}
-                    index={index}
-                    code={layer.code}
-                    sliderOffset={layerOffsets[index]}
-                    label={layer.label}
-                    muted={mutedIds.has(layer.id)}
-                    onToggleMute={() => toggleMute(layer.id)}
-                    onToggleSolo={() => toggleSolo(layer.id)}
-                    isSoloed={soloId === layer.id}
-                    onSliderChange={handleSliderChange}
-                  />
-                ))}
-              </div>
-            )}
             <div className="mx-4">
               <WorkshopOverlay
                 role={workshopRole}
                 seedVoice={workshopSeedVoice}
                 crate={crate}
                 previewingId={previewVoice?.id ?? null}
-                onClose={() => {
-                  setWorkshopSeedVoice(null);
-                  restoreStageAudio().then(() => setWorkshopOpen(false));
-                }}
+                navLevel={nav.navLevel}
+                workshopTabIndex={nav.workshopTabIndex}
+                onClose={closeWorkshopCb}
                 onChangeRole={setWorkshopRole}
                 onPreview={previewWorkshopVoice}
                 onSaveToCrate={saveWorkshopVoiceToCrate}
                 onAddToStage={async (voice) => {
                   await appendVoiceToStage(voice.code, voice.name);
                   setWorkshopSeedVoice(null);
-                  setWorkshopOpen(false);
                 }}
               />
             </div>
           </div>
         ) : !hasCode ? (
           <div className="h-full flex flex-col items-center justify-center px-4 text-center">
-            <div className="text-[13px]" style={{ color: 'rgba(255,255,255,0.46)' }}>
-              click a voice in the crate to begin
+            <div className="text-[14px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              tab to navigate · enter to open · esc to go back
             </div>
-            <div className="mt-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.24)' }}>
-              or press 1–8 to load by number
+            <div className="mt-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
+              press tab to start
             </div>
           </div>
         ) : (
@@ -643,18 +585,14 @@ export default function App() {
                 onSliderChange={handleSliderChange}
                 onToggleMute={() => toggleMute(layer.id)}
                 onToggleSolo={() => toggleSolo(layer.id)}
-                onFocus={() => {
-                  setFocusMode(false);
-                  setFocusedParamIndex(0);
-                  setSelectedLayerId((current) => (current === layer.id ? null : layer.id));
-                }}
+                onFocus={() => {}}
                 onUpdateCode={(nextCode) => updateLayerCode(layer.id, nextCode)}
                 onChangeSound={(nextSound) => updateLayerSound(layer.id, nextSound)}
                 isMuted={mutedIds.has(layer.id)}
                 isSoloed={soloId === layer.id}
-                isSelected={selectedLayerId === layer.id}
-                focusMode={focusMode && selectedLayerId === layer.id}
-                focusedParamIndex={selectedLayerId === layer.id ? focusedParamIndex : -1}
+                isSelected={nav.selectedLayerId === layer.id}
+                navLevel={nav.selectedLayerId === layer.id ? nav.navLevel : 'stage'}
+                lineIndex={nav.selectedLayerId === layer.id ? nav.lineIndex : -1}
                 isPlaying={isPlaying}
                 bpm={bpm}
                 disabled={false}
@@ -666,38 +604,42 @@ export default function App() {
 
       <div className="shrink-0 px-4 py-1.5 flex items-center justify-between text-[9px]" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.22)' }}>
         <div>
-          {focusMode
-            ? '↑↓ nudge value · tab next param · shift+tab prev · esc exit focus'
-            : workshopOpen
-              ? 'esc close · w close'
-              : savedTake
-                ? 'esc dismiss'
-                : layers.length > 0
-                  ? `space ${isPlaying ? 'stop' : 'play'} · 1-${Math.min(layers.length, 8)} select · ↑↓ navigate · enter focus · m mute · x remove · w workshop`
-                  : `space play · 1-${Math.min(crate.length, 8)} load · w workshop`
+          {nav.navLevel === 'parameter'
+            ? '←→ adjust · shift large step · tab next param · esc back'
+            : nav.navLevel === 'lane'
+              ? 'tab next line · enter adjust · e edit · esc back · m mute'
+              : nav.navLevel === 'crate'
+                ? '←→↑↓ navigate · enter stage/unstage · esc close'
+              : nav.workshopOpen
+                ? 'tab navigate · enter select · p preview · s stage · esc back'
+                : savedTake
+                  ? 'esc dismiss'
+                  : layers.length > 0
+                    ? 'tab navigate · enter open · m mute · x remove · w workshop'
+                    : 'tab navigate · enter load · w workshop'
           }
         </div>
         <div style={{ color: 'rgba(255,255,255,0.3)' }}>
-          {focusMode ? 'FOCUS' : workshopOpen ? 'WORKSHOP' : savedTake ? 'TAKE' : 'STAGE'}
+          {nav.navLevel === 'parameter' ? 'PARAMETER'
+            : nav.navLevel === 'crate' ? 'CRATE'
+            : nav.navLevel === 'lane' ? 'LANE'
+            : nav.navLevel === 'workshop-variant' ? 'VARIANT'
+            : nav.navLevel === 'workshop-parameter' ? 'PARAMETER'
+            : nav.workshopOpen ? 'WORKSHOP'
+            : savedTake ? 'TAKE' : 'STAGE'}
         </div>
       </div>
 
       <SetDock
         crate={crate}
         stagedVoiceNames={stagedVoiceNames}
-        workshopOpen={workshopOpen}
+        crateIsOpen={nav.crateIsOpen}
+        crateNavIndex={nav.crateNavIndex}
+        crateHighlighted={nav.crateHighlighted}
         onAddVoice={appendVoiceToStage}
         onRemoveVoice={(name) => {
           const layer = layers.find((l) => l.label === name);
           if (layer) void removeLayer(layer.id);
-        }}
-        onToggleWorkshop={() => {
-          if (workshopOpen) {
-            setWorkshopSeedVoice(null);
-            restoreStageAudio().then(() => setWorkshopOpen(false));
-          } else {
-            openWorkshop();
-          }
         }}
       />
     </div>
