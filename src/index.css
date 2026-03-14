@@ -22,6 +22,11 @@ body {
   0% { background-color: rgba(255, 255, 255, 0.15); }
   100% { background-color: transparent; }
 }
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
 .line-flash {
   animation: line-flash 1.2s ease-out;
 }
@@ -29,3 +34,49 @@ body {
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); }
+
+textarea,
+input,
+button {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Inline code sliders */
+.code-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  outline: none;
+  width: 120px;
+  margin: 0 4px;
+  vertical-align: middle;
+  cursor: pointer;
+  border-radius: 0;
+}
+.code-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 6px;
+  height: 14px;
+  background: #88ff88;
+  border: none;
+  cursor: pointer;
+  border-radius: 0;
+}
+.code-slider::-moz-range-thumb {
+  width: 6px;
+  height: 14px;
+  background: #88ff88;
+  border: none;
+  cursor: pointer;
+  border-radius: 0;
+}
+.code-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  background: rgba(255, 255, 255, 0.15);
+}
+.code-slider:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}

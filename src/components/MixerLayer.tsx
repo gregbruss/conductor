@@ -1,19 +1,26 @@
 import { useRef, useEffect, useCallback } from 'react';
 import type { Layer } from '../types';
-import { highlight } from '../lib/highlight';
 import { generateRowGrid } from './Punchcard';
+import { extractGain } from '../lib/localOps';
+import GainSlider from './GainSlider';
 
 interface Props {
   layer: Layer;
+  layerIndex: number;
   effectiveMuted: boolean;
   onToggleMute: () => void;
   onToggleSolo: () => void;
+  onGainChange: (gain: number) => void;
+  onRemove: () => void;
   isPlaying: boolean;
   bpm: number;
   flash: boolean;
+  isSoloed: boolean;
 }
 
-function MiniPunchcard({ code, isPlaying, effectiveMuted, bpm }: { code: string; isPlaying: boolean; effectiveMuted: boolean; bpm: number }) {
+function MiniStrip({ code, isPlaying, effectiveMuted, bpm }: {
+  code: string; isPlaying: boolean; effectiveMuted: boolean; bpm: number;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const startRef = useRef<number>(0);
@@ -31,7 +38,7 @@ function MiniPunchcard({ code, isPlaying, effectiveMuted, bpm }: { code: string;
     const w = rect.width, h = rect.height;
     ctx.clearRect(0, 0, w, h);
 
-    const cols = 16, gap = 2;
+    const cols = 16, gap = 1;
     const cellW = (w - gap * (cols + 1)) / cols;
     const cellH = h - gap * 2;
 
@@ -46,11 +53,11 @@ function MiniPunchcard({ code, isPlaying, effectiveMuted, bpm }: { code: string;
       const atHead = col === playCol;
       ctx.fillStyle = '#ffffff';
       if (effectiveMuted) {
-        ctx.globalAlpha = active ? 0.06 : 0.02;
+        ctx.globalAlpha = active ? 0.04 : 0.02;
       } else {
         ctx.globalAlpha = active
-          ? (atHead && isPlaying ? 0.9 : (isPlaying ? 0.4 : 0.15))
-          : 0.04;
+          ? (atHead && isPlaying ? 0.8 : (isPlaying ? 0.35 : 0.12))
+          : 0.03;
       }
       ctx.fillRect(x, gap, cellW, cellH);
     }
@@ -68,60 +75,69 @@ function MiniPunchcard({ code, isPlaying, effectiveMuted, bpm }: { code: string;
     return () => cancelAnimationFrame(animRef.current);
   }, [isPlaying, effectiveMuted, draw]);
 
-  return <canvas ref={canvasRef} className="w-full block" style={{ height: '16px' }} />;
+  return <canvas ref={canvasRef} className="w-full block" style={{ height: '12px' }} />;
 }
 
-export default function MixerLayer({ layer, effectiveMuted, onToggleMute, onToggleSolo, isPlaying, bpm, flash }: Props) {
-  const codeLines = layer.code.split('\n');
-  const isSoloed = !effectiveMuted && !layer.muted;
+export default function MixerLayer({
+  layer, layerIndex, effectiveMuted, onToggleMute, onToggleSolo,
+  onGainChange, onRemove, isPlaying, bpm, flash, isSoloed,
+}: Props) {
+  const gain = extractGain(layer.code);
 
   return (
     <div
-      className={`group px-3 py-2.5 mb-1 transition-all duration-200 ${flash ? 'line-flash' : ''}`}
+      className={`flex items-center gap-3 py-2 px-3 mb-0.5 group transition-all duration-200 ${flash ? 'line-flash' : ''}`}
       style={{
-        opacity: effectiveMuted ? 0.3 : 1,
+        opacity: effectiveMuted ? 0.25 : 1,
         background: effectiveMuted ? 'transparent' : 'rgba(255,255,255,0.03)',
         borderLeft: effectiveMuted ? '2px solid transparent' : '2px solid rgba(255,255,255,0.15)',
       }}
     >
-      {/* Top row: label + controls */}
-      <div className="flex items-center gap-3 mb-1">
-        <span className="text-[13px] text-[#8888cc] flex-1">{layer.label}</span>
+      {/* Label */}
+      <span className="text-[12px] w-32 truncate shrink-0" style={{ color: '#8888cc' }}>
+        {layer.label}
+      </span>
 
-        <button
-          onClick={onToggleMute}
-          className="text-[11px] px-2 py-0.5 cursor-pointer transition-all"
-          style={{
-            color: layer.muted ? '#ffffff' : '#6666aa',
-            background: layer.muted ? 'rgba(255,68,68,0.4)' : 'transparent',
-          }}
-          title="Mute this layer"
-        >
-          {layer.muted ? 'MUTED' : 'mute'}
-        </button>
+      {/* Gain slider */}
+      <GainSlider value={gain} onChange={onGainChange} disabled={effectiveMuted} />
 
-        <button
-          onClick={onToggleSolo}
-          className="text-[11px] px-2 py-0.5 cursor-pointer transition-all"
-          style={{
-            color: isSoloed ? '#ffffff' : '#6666aa',
-            background: isSoloed ? 'rgba(136,255,136,0.2)' : 'transparent',
-          }}
-          title="Solo — hear only this layer"
-        >
-          solo
-        </button>
+      {/* Mini punchcard strip */}
+      <div className="flex-1 min-w-0">
+        <MiniStrip code={layer.code} isPlaying={isPlaying} effectiveMuted={effectiveMuted} bpm={bpm} />
       </div>
 
-      {/* Code */}
-      <pre className="text-[13px] leading-6 whitespace-pre-wrap break-words m-0 mb-1.5">
-        {codeLines.map((line, i) => (
-          <span key={i} className="select-text" dangerouslySetInnerHTML={{ __html: highlight(line) + (i < codeLines.length - 1 ? '\n' : '') }} />
-        ))}
-      </pre>
+      {/* Mute */}
+      <button
+        onClick={onToggleMute}
+        className="text-[10px] px-1.5 py-0.5 cursor-pointer transition-all shrink-0"
+        style={{
+          color: layer.muted ? '#ffffff' : '#6666aa',
+          background: layer.muted ? 'rgba(255,68,68,0.4)' : 'transparent',
+        }}
+      >
+        {layer.muted ? 'M' : 'm'}
+      </button>
 
-      {/* Mini punchcard — full width below the code */}
-      <MiniPunchcard code={layer.code} isPlaying={isPlaying} effectiveMuted={effectiveMuted} bpm={bpm} />
+      {/* Solo */}
+      <button
+        onClick={onToggleSolo}
+        className="text-[10px] px-1.5 py-0.5 cursor-pointer transition-all shrink-0"
+        style={{
+          color: isSoloed ? '#ffffff' : '#6666aa',
+          background: isSoloed ? 'rgba(136,255,136,0.2)' : 'transparent',
+        }}
+      >
+        s
+      </button>
+
+      {/* Delete */}
+      <button
+        onClick={onRemove}
+        className="text-[10px] px-1 cursor-pointer transition-all shrink-0 opacity-0 group-hover:opacity-100 hover:text-[#ff4444]"
+        style={{ color: '#6666aa' }}
+      >
+        &times;
+      </button>
     </div>
   );
 }
