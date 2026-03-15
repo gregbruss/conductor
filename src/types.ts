@@ -11,6 +11,7 @@ export interface CrateVoice {
   id: string;
   name: string;
   description: string;
+  setName: string;
   role: VoiceRole;
   code: string;
   tags: string[];

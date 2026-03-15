@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CrateVoice } from '../types';
 import type { NavLevel } from '../hooks/useTreeNav';
 import { CRATE_ROLES } from '../hooks/useTreeNav';
 
 interface Props {
   crate: CrateVoice[];
+  setNames: string[];
   stagedVoiceNames: Set<string>;
   crateIsOpen: boolean;
   crateRoleIndex: number;
@@ -19,6 +20,7 @@ interface Props {
 
 export default function SetDock({
   crate,
+  setNames,
   stagedVoiceNames,
   crateIsOpen,
   crateRoleIndex,
@@ -33,14 +35,33 @@ export default function SetDock({
   const isActive = crateHighlighted || crateIsOpen;
   const inVoiceLevel = navLevel === 'crate-role';
 
+  const availableSets = useMemo(() => {
+    const found = new Set<string>(setNames);
+    for (const voice of crate) {
+      const setName = voice.setName;
+      if (setName) found.add(setName);
+    }
+    return ['all', ...Array.from(found)];
+  }, [crate, setNames]);
+
+  const [selectedSet, setSelectedSet] = useState<string>('all');
+
+  useEffect(() => {
+    if (!availableSets.includes(selectedSet)) {
+      setSelectedSet('all');
+    }
+  }, [availableSets, selectedSet]);
+
   const crateByRole = useMemo(() => {
     const map: Record<string, CrateVoice[]> = {};
     for (const role of CRATE_ROLES) map[role] = [];
     for (const voice of crate) {
-      if (map[voice.role]) map[voice.role].push(voice);
+      const setName = voice.setName;
+      const visibleInSet = selectedSet === 'all' || setName === selectedSet;
+      if (visibleInSet && map[voice.role]) map[voice.role].push(voice);
     }
     return map;
-  }, [crate]);
+  }, [crate, selectedSet]);
 
   // Count staged per role
   const stagedCount = useMemo(() => {
@@ -77,11 +98,35 @@ export default function SetDock({
             }
           `}</style>
 
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {availableSets.map((setName) => {
+              const isSelected = selectedSet === setName;
+              return (
+                <button
+                  key={setName}
+                  type="button"
+                  onClick={() => setSelectedSet(setName)}
+                  className="px-2 py-1 text-[9px] uppercase tracking-[0.18em] cursor-pointer"
+                  style={{
+                    border: isSelected
+                      ? '1px solid rgba(136,255,136,0.35)'
+                      : '1px solid rgba(255,255,255,0.08)',
+                    background: isSelected
+                      ? 'rgba(136,255,136,0.08)'
+                      : 'transparent',
+                    color: isSelected ? '#88ff88' : 'rgba(255,255,255,0.4)',
+                  }}
+                >
+                  {setName}
+                </button>
+              );
+            })}
+          </div>
+
           {/* Role columns */}
           <div className="flex gap-1 overflow-x-auto">
             {CRATE_ROLES.map((role, roleIdx) => {
               const voices = crateByRole[role] || [];
-              if (voices.length === 0) return null;
 
               const isSelectedRole = crateRoleIndex === roleIdx;
               const roleHighlighted = navLevel === 'crate' && isSelectedRole;
@@ -153,6 +198,14 @@ export default function SetDock({
                         </button>
                       );
                     })}
+                    {voices.length === 0 && (
+                      <div
+                        className="px-2 py-2 text-[9px] uppercase tracking-[0.14em]"
+                        style={{ color: 'rgba(255,255,255,0.16)' }}
+                      >
+                        empty
+                      </div>
+                    )}
                   </div>
                 </div>
               );

@@ -8,6 +8,7 @@ import { createBlankWorkshopVoice } from '../lib/workshopSeeds';
 
 interface Props {
   crate: CrateVoice[];
+  setNames: string[];
   stagedVoiceNames: Set<string>;
   previewingId: string | null;
   navLevel: NavLevel;
@@ -26,12 +27,14 @@ interface Props {
   onApplyToLane: (layerId: string, code: string) => void;
   onRemoveFromCrate: (voiceId: string) => void;
   onAddToCrate: (voice: CrateVoice) => void;
-  onUpdateCrateVoice: (voiceId: string, updates: { name: string; code: string }) => void;
+  onUpdateCrateVoice: (voiceId: string, updates: { name: string; code: string; setName: string }) => void;
+  onCreateSet: (setName: string) => void;
 }
 
 type DraftState = {
   sourceId: string | null;
   sourceKind: 'crate' | 'new' | 'stage' | null;
+  setName: string;
   baselineName: string;
   baselineCode: string;
   name: string;
@@ -45,6 +48,11 @@ type ConfirmState = {
   confirmLabel?: string;
   onConfirm: () => void;
 } | null;
+
+type NewSetState = {
+  open: boolean;
+  value: string;
+};
 
 function PulsePreview({ code }: { code: string }) {
   const grid = generateRowGrid(code);
@@ -65,6 +73,7 @@ function buildDraftFromVoice(voice: CrateVoice): DraftState {
   return {
     sourceId: voice.id,
     sourceKind: 'crate',
+    setName: voice.setName,
     baselineName: voice.name,
     baselineCode: voice.code,
     name: voice.name,
@@ -77,6 +86,7 @@ function buildDraftFromStageSeed(seed: NonNullable<Props['initialStageSeed']>): 
   return {
     sourceId: null,
     sourceKind: 'stage',
+    setName: 'chrome',
     baselineName: seed.label,
     baselineCode: seed.code,
     name: seed.label,
@@ -89,6 +99,7 @@ function buildEmptyDraft(): DraftState {
   return {
     sourceId: null,
     sourceKind: null,
+    setName: 'chrome',
     baselineName: '',
     baselineCode: '',
     name: '',
@@ -157,8 +168,84 @@ function ConfirmModal({
   );
 }
 
+function NewSetModal({
+  state,
+  onCancel,
+  onChange,
+  onCreate,
+}: {
+  state: NewSetState;
+  onCancel: () => void;
+  onChange: (value: string) => void;
+  onCreate: () => void;
+}) {
+  useEffect(() => {
+    if (!state.open) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCancel();
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        onCreate();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [state.open, onCancel, onCreate]);
+
+  if (!state.open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ background: 'rgba(0,0,0,0.45)' }}
+    >
+      <div
+        className="w-full max-w-md p-6"
+        style={{ background: '#111127', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 24px 80px rgba(0,0,0,0.45)' }}
+      >
+        <div className="text-[15px] font-semibold text-white">new set</div>
+        <div className="mt-4 text-[11px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          set name
+        </div>
+        <input
+          autoFocus
+          value={state.value}
+          onChange={(event) => onChange(event.target.value)}
+          className="mt-2 w-full bg-transparent outline-none text-[13px]"
+          style={{
+            color: '#ffffff',
+            border: '1px solid rgba(255,255,255,0.12)',
+            padding: '10px 12px',
+          }}
+        />
+        <div className="mt-6 flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 text-[12px] cursor-pointer"
+            style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
+          >
+            cancel
+          </button>
+          <button
+            type="button"
+            onClick={onCreate}
+            className="px-4 py-2 text-[12px] cursor-pointer"
+            style={{ border: '1px solid rgba(136,255,136,0.2)', color: '#88ff88' }}
+          >
+            create set
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function WorkshopOverlay({
   crate,
+  setNames,
   stagedVoiceNames,
   previewingId,
   navLevel,
@@ -173,12 +260,21 @@ export default function WorkshopOverlay({
   onRemoveFromCrate,
   onAddToCrate,
   onUpdateCrateVoice,
+  onCreateSet,
 }: Props) {
   const [selectedRole, setSelectedRole] = useState<VoiceRole>(initialStageSeed?.role ?? initialRole ?? 'kick');
   const [draft, setDraft] = useState<DraftState>(() => (
     initialStageSeed ? buildDraftFromStageSeed(initialStageSeed) : { ...buildEmptyDraft() }
   ));
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
+  const [newSetState, setNewSetState] = useState<NewSetState>({ open: false, value: '' });
+  const availableSets = useMemo(() => {
+    const found = new Set<string>(setNames);
+    for (const voice of crate) {
+      if (voice.setName) found.add(voice.setName);
+    }
+    return Array.from(found);
+  }, [crate, setNames]);
 
   const crateByRole = useMemo(() => {
     const map: Record<string, CrateVoice[]> = {};
@@ -189,7 +285,17 @@ export default function WorkshopOverlay({
     return map;
   }, [crate]);
 
-  const roleVoices = crateByRole[selectedRole] || [];
+  const crateByRoleForSet = useMemo(() => {
+    const map: Record<string, CrateVoice[]> = {};
+    for (const role of CRATE_ROLES) map[role] = [];
+    for (const voice of crate) {
+      if (voice.setName !== draft.setName) continue;
+      if (map[voice.role]) map[voice.role].push(voice);
+    }
+    return map;
+  }, [crate, draft.setName]);
+
+  const roleVoices = crateByRoleForSet[selectedRole] || [];
   const selectedVoice = draft.sourceKind === 'crate' && draft.sourceId
     ? crate.find((voice) => voice.id === draft.sourceId) ?? null
     : null;
@@ -201,6 +307,7 @@ export default function WorkshopOverlay({
         id: draft.sourceId ?? `draft-${selectedRole}`,
         name: draft.name.trim() || `${selectedRole} sketch`,
         description: selectedVoice?.description ?? `${selectedRole} draft`,
+        setName: draft.setName,
         role: selectedRole,
         code: draft.code,
         tags: selectedVoice?.tags ?? [selectedRole, 'draft'],
@@ -215,6 +322,14 @@ export default function WorkshopOverlay({
     setSelectedRole(initialStageSeed.role);
     setDraft(buildDraftFromStageSeed(initialStageSeed));
   }, [initialStageSeed]);
+
+  useEffect(() => {
+    if (availableSets.length === 0) return;
+    setDraft((previous) => {
+      if (previous.setName && availableSets.includes(previous.setName)) return previous;
+      return { ...previous, setName: availableSets[0] };
+    });
+  }, [availableSets]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -259,7 +374,7 @@ export default function WorkshopOverlay({
     if (role === selectedRole) return;
     guardDiscard(`Switch to ${role} and discard current workshop edits?`, () => {
       setSelectedRole(role);
-      setDraft(buildEmptyDraft());
+      setDraft((previous) => ({ ...buildEmptyDraft(), setName: previous.setName }));
     });
   };
 
@@ -269,6 +384,7 @@ export default function WorkshopOverlay({
       setDraft({
         sourceId: null,
         sourceKind: 'new',
+        setName: draft.setName,
         baselineName: '',
         baselineCode: '',
         name: blank.name,
@@ -281,7 +397,7 @@ export default function WorkshopOverlay({
   const handleSave = () => {
     if (!draftVoice || !draftVoice.code.trim()) return;
     if (draft.sourceKind === 'crate' && draft.sourceId) {
-      onUpdateCrateVoice(draft.sourceId, { name: draftVoice.name, code: draftVoice.code });
+      onUpdateCrateVoice(draft.sourceId, { name: draftVoice.name, code: draftVoice.code, setName: draft.setName });
       setDraft((previous) => ({
         ...previous,
         baselineName: draftVoice.name,
@@ -296,6 +412,7 @@ export default function WorkshopOverlay({
       ...fresh,
       name: draftVoice.name,
       code: draftVoice.code,
+      setName: draft.setName,
     };
     onAddToCrate(savedVoice);
     setDraft(buildDraftFromVoice(savedVoice));
@@ -319,6 +436,14 @@ export default function WorkshopOverlay({
     onPreview(draftVoice);
   };
 
+  const handleCreateSet = () => {
+    const nextSet = newSetState.value.trim().toLowerCase();
+    if (!nextSet) return;
+    onCreateSet(nextSet);
+    setDraft((previous) => ({ ...previous, setName: nextSet }));
+    setNewSetState({ open: false, value: '' });
+  };
+
   return (
     <div className="h-full flex flex-col" style={{ background: 'rgba(0,0,0,0.2)' }}>
       <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.15)' }}>
@@ -338,9 +463,37 @@ export default function WorkshopOverlay({
 
       <div className="flex flex-1 min-h-0">
         <div className="shrink-0 w-[120px]" style={{ borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="px-3 pt-3 pb-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <div
+              className="mb-2 text-[9px] uppercase tracking-[0.18em]"
+              style={{ color: 'rgba(255,255,255,0.24)' }}
+            >
+              My Sets
+            </div>
+            <div className="space-y-1">
+              {availableSets.map((setName) => {
+                const isSelectedSet = draft.setName === setName;
+                return (
+                  <button
+                    key={setName}
+                    type="button"
+                    onClick={() => setDraft((previous) => ({ ...previous, setName }))}
+                    className="w-full text-left px-2 py-1 text-[10px] cursor-pointer transition-colors"
+                    style={{
+                      color: isSelectedSet ? '#88ff88' : 'rgba(255,255,255,0.38)',
+                      background: isSelectedSet ? 'rgba(136,255,136,0.06)' : 'transparent',
+                      borderLeft: isSelectedSet ? '2px solid #88ff88' : '2px solid transparent',
+                    }}
+                  >
+                    {setName}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           {CRATE_ROLES.map((role, idx) => {
             const isSelected = selectedRole === role;
-            const count = (crateByRole[role] || []).length;
+            const count = (crateByRoleForSet[role] || []).length;
             return (
               <button
                 key={role}
@@ -384,6 +537,34 @@ export default function WorkshopOverlay({
                 )}
               </div>
               <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  <span>set:</span>
+                  <select
+                    value={draft.setName}
+                    onChange={(event) => {
+                      const nextValue = event.target.value;
+                      if (nextValue === '__new__') {
+                        setNewSetState({ open: true, value: '' });
+                        return;
+                      }
+                      setDraft((previous) => ({ ...previous, setName: nextValue }));
+                    }}
+                    className="bg-transparent outline-none text-[10px]"
+                    style={{
+                      color: '#ffffff',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      padding: '4px 8px',
+                      background: 'rgba(0,0,0,0.15)',
+                    }}
+                  >
+                    {[...new Set([draft.setName, ...availableSets])].map((setName) => (
+                      <option key={setName} value={setName}>
+                        {setName}
+                      </option>
+                    ))}
+                    <option value="__new__">+ new set</option>
+                  </select>
+                </label>
                 <button
                   type="button"
                   onClick={startNewVoice}
@@ -568,6 +749,12 @@ export default function WorkshopOverlay({
         </div>
       </div>
       <ConfirmModal state={confirmState} onCancel={() => setConfirmState(null)} />
+      <NewSetModal
+        state={newSetState}
+        onCancel={() => setNewSetState({ open: false, value: '' })}
+        onChange={(value) => setNewSetState((previous) => ({ ...previous, value }))}
+        onCreate={handleCreateSet}
+      />
     </div>
   );
 }

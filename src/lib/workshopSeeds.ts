@@ -40,6 +40,7 @@ export function createBlankWorkshopVoice(role: VoiceRole): CrateVoice {
     id: `scratch-${role}-${Date.now()}`,
     name: `new ${role}`,
     description: `Built from scratch in workshop.`,
+    setName: 'chrome',
     role,
     code: WORKSHOP_SEEDS[role],
     tags: [role, 'scratch'],

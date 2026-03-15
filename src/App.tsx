@@ -6,7 +6,7 @@ import SetDock from './components/SetDock';
 import LandingPage from './components/LandingPage';
 import WorkshopOverlay from './components/WorkshopOverlay';
 import { parseLayers, reconstructCode } from './lib/parser';
-import { loadCrate, saveCrate } from './lib/crateStore';
+import { loadCrate, loadSetNames, saveCrate, saveSetNames } from './lib/crateStore';
 import { useTreeNav, type NavLevel } from './hooks/useTreeNav';
 import type { CrateVoice, VoiceRole } from './types';
 
@@ -127,6 +127,7 @@ export default function App() {
   const [mutedIds, setMutedIds] = useState<Set<string>>(new Set());
   const [soloId, setSoloId] = useState<string | null>(null);
   const [crate, setCrate] = useState<CrateVoice[]>(() => loadCrate());
+  const [crateSetNames, setCrateSetNames] = useState<string[]>(() => loadSetNames());
   const [previewVoice, setPreviewVoice] = useState<CrateVoice | null>(null);
   const [workshopStageSeed, setWorkshopStageSeed] = useState<WorkshopStageSeed>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -146,6 +147,10 @@ export default function App() {
   useEffect(() => {
     saveCrate(crate);
   }, [crate]);
+
+  useEffect(() => {
+    saveSetNames(crateSetNames);
+  }, [crateSetNames]);
 
   useEffect(() => {
     if (!statusMessage) return undefined;
@@ -595,6 +600,7 @@ export default function App() {
             <div className="h-full overflow-auto">
               <WorkshopOverlay
                 crate={crate}
+                setNames={crateSetNames}
                 stagedVoiceNames={stagedVoiceNames}
                 previewingId={previewVoice?.id ?? null}
                 navLevel={nav.navLevel}
@@ -620,8 +626,11 @@ export default function App() {
                 }}
                 onUpdateCrateVoice={(voiceId, updates) => {
                   setCrate((prev) => prev.map((v) => (
-                    v.id === voiceId ? { ...v, name: updates.name, code: updates.code } : v
+                    v.id === voiceId ? { ...v, name: updates.name, code: updates.code, setName: updates.setName } : v
                   )));
+                }}
+                onCreateSet={(setName) => {
+                  setCrateSetNames((prev) => prev.includes(setName) ? prev : [...prev, setName]);
                 }}
                 onApplyToLane={(layerId, nextCode) => {
                   const targetLayer = layers.find((layer) => layer.id === layerId);
@@ -678,6 +687,7 @@ export default function App() {
 
       <SetDock
         crate={crate}
+        setNames={crateSetNames}
         stagedVoiceNames={stagedVoiceNames}
         crateIsOpen={nav.crateIsOpen}
         crateRoleIndex={nav.crateRoleIndex}
