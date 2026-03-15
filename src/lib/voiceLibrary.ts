@@ -711,6 +711,567 @@ export const VOICE_LIBRARY: VoicePreset[] = [
 .gain(slider(0.38, 0, 1))`,
     tags: ['accent', 'seam', 'bright'],
   },
+  // === SHOWCASE SET: "city lights" — brighter, bouncier, garage / house-adjacent ===
+  {
+    id: 'kick-sidewalk-bounce',
+    name: 'sidewalk bounce',
+    description: 'A springy four-on-the-floor kick with a lighter body and more forward motion.',
+    role: 'kick',
+    code: `$: s("bd*4")
+.speed("<1 1 1.02 1>")
+.lpf(slider(240, 80, 480))
+.gain(slider(0.92, 0, 1.4))`,
+    tags: ['bouncy', 'springy', 'house'],
+  },
+  {
+    id: 'hats-shuffle-lace',
+    name: 'shuffle lace',
+    description: 'A skipping hat line with shuffled openings and light stereo motion.',
+    role: 'hats',
+    code: `$: s("<hh [hh oh] hh hh [oh hh] hh>")
+.hpf(slider(6800, 2500, 12000))
+.pan("<-0.15 0.15 0.1 -0.1>")
+.gain(slider(0.58, 0, 1.3))`,
+    tags: ['shuffle', 'lace', 'skipping'],
+  },
+  {
+    id: 'snare-club-skip',
+    name: 'club skip',
+    description: 'A clap-forward backbeat with extra skip notes for garage swing.',
+    role: 'snare',
+    code: `$: s("<[~ cp] [~ sd cp] [rim ~] [~ cp]>")
+.room(slider(0.18, 0, 0.8))
+.hpf(slider(1200, 300, 4200))
+.gain(slider(0.76, 0, 1.3))`,
+    tags: ['clap', 'garage', 'swing'],
+  },
+  {
+    id: 'bass-bubble-step',
+    name: 'bubble step',
+    description: 'A round square bass that hops between roots and passing tones.',
+    role: 'bass',
+    code: `$: note("<c3 [eb3 g2] bb2 [g2 c3]>")
+.s("square")
+.cut(1)
+.lpf(slider(820, 180, 2200))
+.gain(slider(0.62, 0, 1.2))`,
+    tags: ['round', 'hoppy', 'garage'],
+  },
+  {
+    id: 'bass-neon-walk',
+    name: 'neon walk',
+    description: 'A warmer bassline that glides through the groove instead of punching through it.',
+    role: 'bass',
+    code: `$: note("<c2 eb2 g2 bb2 c3 bb2>")
+.s("triangle")
+.room(slider(0.08, 0, 0.5))
+.lpf(slider(640, 140, 1800))
+.gain(slider(0.68, 0, 1.2))`,
+    tags: ['warm', 'walking', 'rounded'],
+  },
+  {
+    id: 'pad-organ-float',
+    name: 'organ float',
+    description: 'A soft organ chord bed that feels uplifting instead of ominous.',
+    role: 'pad',
+    code: `$: note("<[c4,eb4,g4] [eb4,g4,bb4] [g4,bb4,d5] [bb3,d4,f4]>")
+.s("square")
+.delay(slider(0.16, 0, 0.6))
+.room(slider(0.34, 0, 1))
+.gain(slider(0.34, 0, 1))`,
+    tags: ['organ', 'uplift', 'bed'],
+  },
+  {
+    id: 'lead-sunline-hook',
+    name: 'sunline hook',
+    description: 'A bright hook line that turns the groove into a song without overwhelming it.',
+    role: 'lead',
+    code: `$: note("<g4 bb4 c5 g4 eb5 c5>")
+.s("supersaw")
+.delay(slider(0.22, 0, 0.8))
+.lpf(slider(2800, 600, 7000))
+.gain(slider(0.48, 0, 1.1))`,
+    tags: ['hook', 'bright', 'songful'],
+  },
+  {
+    id: 'texture-boardwalk-air',
+    name: 'boardwalk air',
+    description: 'A soft open-hat haze that adds breeze and width instead of grit.',
+    role: 'texture',
+    code: `$: s("<oh ~ hh ~> [~ oh]")
+.delay(slider(0.28, 0, 0.9))
+.hpf(slider(5200, 1800, 12000))
+.gain(slider(0.26, 0, 1))
+.pan("<-0.22 0.22 0.1 -0.1>")`,
+    tags: ['air', 'width', 'breeze'],
+  },
+  {
+    id: 'perc-shaker-roll',
+    name: 'shaker roll',
+    description: 'A high shaker loop that fills space and pushes the groove forward.',
+    role: 'perc',
+    code: `$: s("hc*8")
+.hpf(slider(6200, 2500, 12000))
+.gain("<0.45 0.35 0.5 0.32 0.42 0.36 0.48 0.34>")
+.pan("<-0.1 0.1>")`,
+    tags: ['shaker', 'rolling', 'forward'],
+  },
+  {
+    id: 'fx-laser-ribbon',
+    name: 'laser ribbon',
+    description: 'A shiny transition accent for bright phrases and cleaner drops.',
+    role: 'fx',
+    code: `$: s("<cp oh ~ ~>")
+.delay(slider(0.36, 0, 1))
+.hpf(slider(4200, 1000, 12000))
+.room(slider(0.24, 0, 0.9))
+.gain(slider(0.32, 0, 1))`,
+    tags: ['shiny', 'transition', 'clean'],
+  },
+  // === SHOWCASE SET: "midnight cinema" — cinematic, expressive, using advanced Strudel features ===
+  {
+    id: 'pad-choir-vowel',
+    name: 'choir vowel',
+    description: 'Saw chord that morphs through vowel sounds. Sounds like a ghostly choir.',
+    role: 'pad',
+    code: `$: note("<[c4,eb4,g4] [ab3,c4,eb4] [bb3,d4,f4] [g3,bb3,d4]>")
+.s("sawtooth")
+.vowel("<a e i o u>")
+.room(slider(0.5, 0, 1))
+.gain(slider(0.3, 0, 0.8))`,
+    tags: ['choir', 'vowel', 'morphing'],
+  },
+  {
+    id: 'lead-phaser-aria',
+    name: 'phaser aria',
+    description: 'Triangle melody with phaser sweep. Ethereal and wide.',
+    role: 'lead',
+    code: `$: note("<c5 eb5 g5 bb5 g5 eb5 c5 bb4>")
+.s("triangle")
+.phaser(slider(4, 1, 12))
+.phaserdepth(slider(0.6, 0, 1))
+.room(slider(0.4, 0, 1))
+.gain(slider(0.45, 0, 1))`,
+    tags: ['phaser', 'ethereal', 'wide'],
+  },
+  {
+    id: 'bass-pitch-dive',
+    name: 'pitch dive',
+    description: 'Bass note that bends down on each hit. Dramatic, cinematic.',
+    role: 'bass',
+    code: `$: note("<c2 ~ eb2 ~ g1 ~ bb1 ~>")
+.s("sawtooth")
+.penv(-12)
+.pdecay(slider(0.3, 0.05, 0.8))
+.lpf(slider(400, 80, 1200))
+.gain(slider(0.8, 0, 1.3))`,
+    tags: ['pitch-bend', 'dive', 'cinematic'],
+  },
+  {
+    id: 'texture-coarse-rain',
+    name: 'coarse rain',
+    description: 'Sample-rate-crushed hats. Digital rain from a broken speaker.',
+    role: 'texture',
+    code: `$: s("hh*16")
+.gain("<0.3 0.1 0.2 0.1 0.3 0.05 0.15 0.1 0.25 0.1 0.2 0.05 0.3 0.1 0.15 0.1>")
+.coarse(slider(8, 2, 32))
+.hpf(slider(6000, 1000, 14000))
+.pan(sine.range(-0.4, 0.4).slow(3))`,
+    tags: ['coarse', 'digital', 'rain'],
+  },
+  {
+    id: 'pad-tremolo-glass',
+    name: 'tremolo glass',
+    description: 'Sine chord with tremolo. Shimmers like light through water.',
+    role: 'pad',
+    code: `$: note("<[c5,g5] [eb5,bb5] [g4,d5] [bb4,f5]>")
+.s("sine")
+.tremolosync(slider(4, 1, 16))
+.tremolodepth(slider(0.5, 0, 1))
+.room(slider(0.6, 0, 1))
+.gain(slider(0.35, 0, 0.9))`,
+    tags: ['tremolo', 'shimmer', 'glass'],
+  },
+  {
+    id: 'kick-envelope-thud',
+    name: 'envelope thud',
+    description: 'Kick with pitch envelope. The pitch drops from high to low on each hit.',
+    role: 'kick',
+    code: `$: note("c1*4")
+.s("sine")
+.penv(24)
+.pdecay(0.05)
+.decay(slider(0.15, 0.05, 0.4))
+.gain(slider(1.0, 0, 1.5))`,
+    tags: ['envelope', 'synthesized', 'thud'],
+  },
+  {
+    id: 'lead-filter-cry',
+    name: 'filter cry',
+    description: 'Saw lead with filter envelope that opens and closes on each note. Vocal, crying.',
+    role: 'lead',
+    code: `$: note("<c5 ~ eb5 g5 ~ bb5 g5 ~>")
+.s("sawtooth")
+.lpf(400)
+.lpa(0.01)
+.lpd(slider(0.3, 0.05, 0.8))
+.lps(0.2)
+.lpenv(slider(4000, 500, 8000))
+.room(slider(0.3, 0, 0.8))
+.gain(slider(0.5, 0, 1.1))`,
+    tags: ['filter-envelope', 'crying', 'vocal'],
+  },
+  {
+    id: 'perc-crushed-tabla',
+    name: 'crushed tabla',
+    description: 'Tabla through a bit crusher. Ancient meets digital.',
+    role: 'perc',
+    code: `$: s("<tabla:0 [tabla:1 tabla:2] tabla:0 [tabla:3 tabla:1]>")
+.crush(slider(6, 3, 12))
+.room(slider(0.2, 0, 0.7))
+.gain(slider(0.55, 0, 1.2))`,
+    tags: ['tabla', 'crushed', 'hybrid'],
+  },
+  {
+    id: 'fx-reverse-swell',
+    name: 'reverse swell',
+    description: 'A reversed crash with long reverb. Builds tension before a moment.',
+    role: 'fx',
+    code: `$: s("<cr ~ ~ ~>")
+.speed(-1)
+.room(slider(0.7, 0, 1))
+.roomsize(slider(4, 1, 10))
+.delay(slider(0.3, 0, 0.8))
+.gain(slider(0.4, 0, 1))`,
+    tags: ['reverse', 'swell', 'tension'],
+  },
+  // === SHOWCASE SET: "late night" — acoustic / jazzy / lo-fi / organic ===
+  {
+    id: 'kick-jazz-room',
+    name: 'jazz room',
+    description: 'Acoustic jazz kick with roomy decay. Sounds like a real drummer.',
+    role: 'kick',
+    code: `$: s("jazz:0 ~ ~ jazz:0 ~ ~ jazz:0 ~")
+.gain(slider(0.8, 0, 1.5))
+.room(slider(0.25, 0, 0.8))`,
+    tags: ['jazz', 'acoustic', 'roomy'],
+  },
+  {
+    id: 'hats-brush-sweep',
+    name: 'brush sweep',
+    description: 'Jazz brushes riding on the kit. Light, swinging, human.',
+    role: 'hats',
+    code: `$: s("<jazz:1 jazz:1 [jazz:1 jazz:2] jazz:1>")
+.gain(slider(0.5, 0, 1.2))
+.room(slider(0.2, 0, 0.7))
+.hpf(slider(3000, 800, 10000))`,
+    tags: ['brush', 'jazz', 'swing'],
+  },
+  {
+    id: 'bass-jv-walk',
+    name: 'jv walk',
+    description: 'Walking bass using JV bass samples. Warm and round.',
+    role: 'bass',
+    code: `$: s("<jvbass:0 jvbass:1 jvbass:2 jvbass:0 jvbass:3 jvbass:2 jvbass:1 jvbass:0>")
+.gain(slider(0.7, 0, 1.3))
+.lpf(slider(1200, 300, 3000))
+.room(slider(0.15, 0, 0.6))`,
+    tags: ['jv', 'walking', 'warm'],
+  },
+  {
+    id: 'bass-pluck-step',
+    name: 'pluck step',
+    description: 'Plucked string bass. Woody, organic, alive.',
+    role: 'bass',
+    code: `$: note("<c2 eb2 f2 g2 bb2 g2 f2 eb2>")
+.s("pluck")
+.lpf(slider(800, 200, 2000))
+.room(slider(0.2, 0, 0.7))
+.gain(slider(0.6, 0, 1.2))`,
+    tags: ['pluck', 'woody', 'organic'],
+  },
+  {
+    id: 'pad-arpy-wash',
+    name: 'arpy wash',
+    description: 'Tuned arpy samples held as chords. Warm and strange.',
+    role: 'pad',
+    code: `$: s("<arpy:0 arpy:2 arpy:4 arpy:1>")
+.room(slider(0.5, 0, 1))
+.delay(slider(0.3, 0, 0.8))
+.gain(slider(0.5, 0, 1.1))`,
+    tags: ['arpy', 'warm', 'strange'],
+  },
+  {
+    id: 'lead-sax-phrase',
+    name: 'sax phrase',
+    description: 'Saxophone samples arranged as a melody. Smoky and real.',
+    role: 'lead',
+    code: `$: s("<sax:0 ~ sax:1 ~ sax:2 ~ sax:0 ~>")
+.room(slider(0.3, 0, 0.9))
+.gain(slider(0.5, 0, 1.1))`,
+    tags: ['sax', 'smoky', 'real'],
+  },
+  {
+    id: 'lead-arpy-melody',
+    name: 'arpy melody',
+    description: 'Tuned arpy hits as a melodic line. Bright and playful.',
+    role: 'lead',
+    code: `$: s("<arpy:0 arpy:3 arpy:5 arpy:7 arpy:5 arpy:3>")
+.delay(slider(0.2, 0, 0.7))
+.room(slider(0.25, 0, 0.8))
+.gain(slider(0.55, 0, 1.1))`,
+    tags: ['arpy', 'bright', 'playful'],
+  },
+  {
+    id: 'perc-tabla-pulse',
+    name: 'tabla pulse',
+    description: 'Tabla pattern for organic rhythmic texture.',
+    role: 'perc',
+    code: `$: s("<tabla:0 [tabla:1 tabla:2] tabla:0 [tabla:3 tabla:1]>")
+.gain(slider(0.6, 0, 1.3))
+.room(slider(0.15, 0, 0.6))`,
+    tags: ['tabla', 'organic', 'world'],
+  },
+  {
+    id: 'perc-sitar-ghost',
+    name: 'sitar ghost',
+    description: 'Sitar samples as sparse texture. Haunting and unexpected.',
+    role: 'perc',
+    code: `$: s("<sitar:0 ~ ~ sitar:1 ~ ~ sitar:2 ~>")
+.room(slider(0.4, 0, 1))
+.delay(slider(0.25, 0, 0.8))
+.gain(slider(0.35, 0, 0.9))`,
+    tags: ['sitar', 'haunting', 'sparse'],
+  },
+  {
+    id: 'texture-vinyl-room',
+    name: 'vinyl room',
+    description: 'Crackling vinyl noise with room reverb. Instant lo-fi.',
+    role: 'texture',
+    code: `$: s("white")
+.gain(0.03)
+.crush(slider(8, 4, 12))
+.lpf(slider(4000, 800, 8000))
+.hpf(slider(200, 50, 1000))
+.room(slider(0.4, 0, 1))`,
+    tags: ['vinyl', 'lofi', 'crackle'],
+  },
+  {
+    id: 'texture-mouth-haze',
+    name: 'mouth haze',
+    description: 'Mouth and breath samples as texture. Human, weird, alive.',
+    role: 'texture',
+    code: `$: s("<mouth:0 ~ mouth:1 ~ ~ mouth:2 ~ ~>")
+.room(slider(0.5, 0, 1))
+.hpf(slider(2000, 400, 8000))
+.gain(slider(0.3, 0, 0.8))`,
+    tags: ['mouth', 'breath', 'human'],
+  },
+  // === SHOWCASE SET: "parlour" — piano-driven, intimate, melodic ===
+  {
+    id: 'kick-soft-thump',
+    name: 'soft thump',
+    description: 'Gentle kick with lots of room. Like a heartbeat in a quiet room.',
+    role: 'kick',
+    code: `$: s("bd ~ ~ bd ~ ~ ~ ~")
+.room(slider(0.4, 0, 1))
+.lpf(slider(140, 60, 300))
+.gain(slider(0.6, 0, 1.2))`,
+    tags: ['gentle', 'sparse', 'heartbeat'],
+  },
+  {
+    id: 'pad-piano-chords',
+    name: 'piano chords',
+    description: 'Slow chord changes on arpy. The center of a piano piece.',
+    role: 'pad',
+    code: `$: note("<[c4,eb4,g4] [ab3,c4,eb4] [bb3,d4,f4] [g3,bb3,d4]>")
+.s("arpy")
+.room(slider(0.45, 0, 1))
+.gain(slider(0.55, 0, 1.1))`,
+    tags: ['piano', 'chords', 'center'],
+  },
+  {
+    id: 'lead-piano-right',
+    name: 'piano right hand',
+    description: 'A simple right-hand melody over the chords. Sparse and patient.',
+    role: 'lead',
+    code: `$: note("<g4 ~ bb4 c5 ~ eb5 ~ c5>")
+.s("arpy")
+.room(slider(0.4, 0, 1))
+.delay(slider(0.15, 0, 0.6))
+.gain(slider(0.45, 0, 1))`,
+    tags: ['piano', 'melody', 'right-hand'],
+  },
+  {
+    id: 'bass-piano-left',
+    name: 'piano left hand',
+    description: 'Low octave bass notes. The left hand anchoring the harmony.',
+    role: 'bass',
+    code: `$: note("<c2 ~ ab1 ~ bb1 ~ g1 ~>")
+.s("arpy")
+.room(slider(0.3, 0, 0.9))
+.gain(slider(0.5, 0, 1.1))`,
+    tags: ['piano', 'bass', 'left-hand'],
+  },
+  {
+    id: 'lead-piano-arp',
+    name: 'piano arpeggio',
+    description: 'Arpeggiated notes running up and down. Adds motion to the chords.',
+    role: 'lead',
+    code: `$: note("<c4 eb4 g4 bb4 g4 eb4 c4 bb3>")
+.s("arpy")
+.room(slider(0.35, 0, 0.9))
+.gain(slider(0.4, 0, 1))`,
+    tags: ['piano', 'arpeggio', 'motion'],
+  },
+  {
+    id: 'texture-piano-dust',
+    name: 'piano dust',
+    description: 'Crushed high piano notes barely audible. Like hearing a piano through a wall.',
+    role: 'texture',
+    code: `$: note("<c6 ~ ~ eb6 ~ ~ g5 ~>")
+.s("arpy")
+.crush(slider(8, 4, 14))
+.room(slider(0.6, 0, 1))
+.gain(slider(0.15, 0, 0.5))`,
+    tags: ['piano', 'dusty', 'distant'],
+  },
+  // === SHOWCASE SET: "callejón" — reggaeton / dembow / latin bounce ===
+  {
+    id: 'kick-dembow-trunk',
+    name: 'dembow trunk',
+    description: 'The dembow kick pattern. The heartbeat of reggaeton.',
+    role: 'kick',
+    code: `$: s("bd ~ bd bd ~ ~ ~ ~")
+.lpf(slider(220, 80, 400))
+.gain(slider(1.1, 0, 1.5))`,
+    tags: ['dembow', 'reggaeton', 'bounce'],
+  },
+  {
+    id: 'snare-dembow-crack',
+    name: 'dembow crack',
+    description: 'Snare hits on the dembow off-beats. The other half of the pattern.',
+    role: 'snare',
+    code: `$: s("~ ~ ~ ~ ~ sd ~ sd")
+.room(slider(0.1, 0, 0.6))
+.hpf(slider(400, 100, 2000))
+.gain(slider(0.95, 0, 1.4))`,
+    tags: ['dembow', 'crack', 'offbeat'],
+  },
+  {
+    id: 'hats-perreo-tick',
+    name: 'perreo tick',
+    description: 'Fast closed hats that ride on top of the dembow. Keeps the energy up.',
+    role: 'hats',
+    code: `$: s("hh*8")
+.gain("<0.7 0.4 0.6 0.35 0.7 0.4 0.55 0.3>")
+.hpf(slider(8000, 3000, 14000))`,
+    tags: ['perreo', 'fast', 'riding'],
+  },
+  {
+    id: 'hats-reggaeton-swing',
+    name: 'reggaeton swing',
+    description: 'Open-closed hat swing that gives the groove its head-nod.',
+    role: 'hats',
+    code: `$: s("<hh hh [hh oh] hh hh hh [oh hh] hh>")
+.hpf(slider(6000, 2000, 12000))
+.gain(slider(0.6, 0, 1.3))`,
+    tags: ['swing', 'open-closed', 'nod'],
+  },
+  {
+    id: 'bass-callejon-sub',
+    name: 'callejón sub',
+    description: 'Heavy sine sub that follows the kick pattern. Chest-rattling.',
+    role: 'bass',
+    code: `$: note("c2 ~ c2 c2 ~ ~ ~ ~")
+.s("sine")
+.lpf(slider(180, 60, 500))
+.gain(slider(1.0, 0, 1.5))`,
+    tags: ['sub', 'heavy', 'following'],
+  },
+  {
+    id: 'bass-latin-bounce',
+    name: 'latin bounce',
+    description: 'Bouncy saw bass with a syncopated latin feel.',
+    role: 'bass',
+    code: `$: note("<c2 [~ eb2] g1 [bb1 c2]>")
+.s("sawtooth")
+.lpf(slider(600, 120, 1600))
+.cut(1)
+.gain(slider(0.75, 0, 1.3))`,
+    tags: ['bouncy', 'syncopated', 'latin'],
+  },
+  {
+    id: 'pad-tropical-wash',
+    name: 'tropical wash',
+    description: 'Warm major-ish chord wash. Brighter than the warehouse pads.',
+    role: 'pad',
+    code: `$: note("<[c4,eb4,g4] [f3,ab3,c4] [g3,bb3,d4] [bb3,d4,f4]>")
+.s("supersaw")
+.lpf(slider(2400, 500, 6000))
+.room(slider(0.35, 0, 1))
+.gain(slider(0.3, 0, 0.9))`,
+    tags: ['tropical', 'warm', 'bright'],
+  },
+  {
+    id: 'lead-melodia-pluck',
+    name: 'melodía pluck',
+    description: 'Short plucky lead that plays a repeating melodic hook.',
+    role: 'lead',
+    code: `$: note("<c5 eb5 g5 ~ bb4 ~ g4 ~>")
+.s("triangle")
+.decay(0.08)
+.lpf(slider(3200, 600, 8000))
+.gain(slider(0.55, 0, 1.2))`,
+    tags: ['pluck', 'hook', 'melodic'],
+  },
+  {
+    id: 'lead-flute-ghost',
+    name: 'flute ghost',
+    description: 'Sine melody with delay that sounds like a distant flute.',
+    role: 'lead',
+    code: `$: note("<~ g5 ~ eb5 ~ c5 g4 ~>")
+.s("sine")
+.delay(slider(0.35, 0, 0.9))
+.room(slider(0.3, 0, 0.8))
+.gain(slider(0.4, 0, 1))`,
+    tags: ['flute', 'ghostly', 'delayed'],
+  },
+  {
+    id: 'perc-conga-conversation',
+    name: 'conga conversation',
+    description: 'High and low tom pattern mimicking congas. Adds organic groove.',
+    role: 'perc',
+    code: `$: s("<lt [~ mt] ht [mt lt]>")
+.room(slider(0.12, 0, 0.6))
+.lpf(slider(2200, 400, 5000))
+.gain(slider(0.65, 0, 1.3))`,
+    tags: ['conga', 'organic', 'conversation'],
+  },
+  {
+    id: 'perc-rim-tumbao',
+    name: 'rim tumbao',
+    description: 'Rim click tumbao pattern. The subtle skeleton under the groove.',
+    role: 'perc',
+    code: `$: s("<rim [~ rim] ~ rim [~ rim] rim ~ [rim ~]>")
+.hpf(slider(1800, 400, 5000))
+.gain(slider(0.45, 0, 1.1))
+.pan("<-0.15 0.15>")`,
+    tags: ['tumbao', 'rim', 'skeleton'],
+  },
+  {
+    id: 'fx-air-horn',
+    name: 'air horn',
+    description: 'One-shot accent. Use it once, at the right moment.',
+    role: 'fx',
+    code: `$: note("<c6 ~ ~ ~>")
+.s("square")
+.lpf(slider(4000, 1000, 10000))
+.room(slider(0.4, 0, 1))
+.decay(0.3)
+.gain(slider(0.3, 0, 0.8))`,
+    tags: ['horn', 'accent', 'moment'],
+  },
 ];
 
 export function getPresetsByRole(role: VoiceRole): VoicePreset[] {

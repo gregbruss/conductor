@@ -76,6 +76,11 @@ export interface TreeNavState {
   crateRoleIndex: number;
   crateVoiceIndex: number;
   crateHighlighted: boolean;
+  // Imperative methods for click navigation
+  jumpToLane: (laneIdx: number) => void;
+  enterLane: (laneIdx: number) => void;
+  openCrate: () => void;
+  openCrateRole: (roleIdx: number) => void;
 }
 
 export function useTreeNav(params: UseTreeNavParams): TreeNavState {
@@ -531,6 +536,29 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
+  // Imperative methods for click-driven navigation
+  const jumpToLane = useCallback((laneIdx: number) => {
+    setNavLevel('stage');
+    setStageIndex(laneIdx);
+  }, []);
+
+  const enterLane = useCallback((laneIdx: number) => {
+    setStageIndex(laneIdx);
+    setNavLevel('lane');
+    setLineIndex(0);
+  }, []);
+
+  const openCrate = useCallback(() => {
+    setNavLevel('crate');
+    setCrateRoleIndex(0);
+  }, []);
+
+  const openCrateRole = useCallback((roleIdx: number) => {
+    setNavLevel('crate-role');
+    setCrateRoleIndex(roleIdx);
+    setCrateVoiceIndex(0);
+  }, []);
+
   return {
     navLevel,
     stageIndex,
@@ -545,5 +573,10 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
     crateRoleIndex,
     crateVoiceIndex,
     crateHighlighted,
+    // Imperative
+    jumpToLane,
+    enterLane,
+    openCrate,
+    openCrateRole,
   };
 }

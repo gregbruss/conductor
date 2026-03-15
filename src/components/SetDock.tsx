@@ -11,6 +11,8 @@ interface Props {
   crateVoiceIndex: number;
   navLevel: NavLevel;
   crateHighlighted: boolean;
+  onOpenCrate: () => void;
+  onOpenCrateRole: (roleIdx: number) => void;
   onAddVoice: (code: string, label: string) => void;
   onRemoveVoice: (name: string) => void;
 }
@@ -23,6 +25,8 @@ export default function SetDock({
   crateVoiceIndex,
   navLevel,
   crateHighlighted,
+  onOpenCrate,
+  onOpenCrateRole,
   onAddVoice,
   onRemoveVoice,
 }: Props) {
@@ -55,9 +59,14 @@ export default function SetDock({
         background: 'rgba(0,0,0,0.3)',
       }}
     >
-      <div className="text-[10px] uppercase tracking-[0.2em] font-bold" style={{ color: isActive ? '#88ff88' : 'rgba(255,255,255,0.5)' }}>
+      <button
+        type="button"
+        onClick={onOpenCrate}
+        className="text-[10px] uppercase tracking-[0.2em] font-bold cursor-pointer"
+        style={{ color: isActive ? '#88ff88' : 'rgba(255,255,255,0.5)' }}
+      >
         crate
-      </div>
+      </button>
 
       {crateIsOpen ? (
         <div className="mt-3" style={{ animation: 'crateSlideUp 0.15s ease-out' }}>
@@ -96,18 +105,23 @@ export default function SetDock({
                   }}
                 >
                   {/* Role header */}
-                  <div
-                    className="px-2 py-1.5 text-[9px] uppercase tracking-[0.18em]"
+                  <button
+                    type="button"
+                    onClick={() => onOpenCrateRole(roleIdx)}
+                    className="w-full text-left px-2 py-1.5 text-[9px] uppercase tracking-[0.18em] cursor-pointer"
                     style={{
                       color: roleHighlighted || (isSelectedRole && inVoiceLevel) ? '#88ff88' : 'rgba(255,255,255,0.35)',
                       borderBottom: '1px solid rgba(255,255,255,0.06)',
                     }}
                   >
                     {role}{staged > 0 ? ` · ${staged}` : ''}
-                  </div>
+                  </button>
 
                   {/* Voice list */}
-                  <div className="py-1">
+                  <div
+                    className="py-1 overflow-y-auto"
+                    style={{ maxHeight: '280px' }}
+                  >
                     {voices.map((voice, voiceIdx) => {
                       const isStaged = stagedVoiceNames.has(voice.name);
                       const voiceHighlighted = inVoiceLevel && isSelectedRole && crateVoiceIndex === voiceIdx;

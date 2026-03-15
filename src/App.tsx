@@ -445,7 +445,10 @@ export default function App() {
             focusedLayerId={nav.selectedLayerId}
             isPlaying={isPlaying}
             bpm={bpm}
-            onFocusLayer={() => {}}
+            onFocusLayer={(id) => {
+              const idx = layers.findIndex((l) => l.id === id);
+              if (idx >= 0) nav.jumpToLane(idx);
+            }}
             onToggleMute={toggleMute}
             onToggleSolo={toggleSolo}
           />
@@ -545,7 +548,13 @@ export default function App() {
                 onSliderChange={handleSliderChange}
                 onToggleMute={() => toggleMute(layer.id)}
                 onToggleSolo={() => toggleSolo(layer.id)}
-                onFocus={() => {}}
+                onFocus={() => {
+                  if (nav.selectedLayerId === layer.id && nav.navLevel === 'stage') {
+                    nav.enterLane(index);
+                  } else {
+                    nav.jumpToLane(index);
+                  }
+                }}
                 onUpdateCode={(nextCode) => updateLayerCode(layer.id, nextCode)}
                 onChangeSound={(nextSound) => updateLayerSound(layer.id, nextSound)}
                 isMuted={mutedIds.has(layer.id)}
@@ -601,6 +610,8 @@ export default function App() {
         crateVoiceIndex={nav.crateVoiceIndex}
         navLevel={nav.navLevel}
         crateHighlighted={nav.crateHighlighted}
+        onOpenCrate={nav.openCrate}
+        onOpenCrateRole={nav.openCrateRole}
         onAddVoice={appendVoiceToStage}
         onRemoveVoice={(name) => {
           const layer = layers.find((l) => l.label === name);

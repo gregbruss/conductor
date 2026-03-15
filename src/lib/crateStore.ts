@@ -1,30 +1,43 @@
 import type { CrateVoice } from '../types';
 import { VOICE_LIBRARY } from './voiceLibrary';
 
-const CRATE_KEY = 'conductor_crate_v5';
+const CRATE_KEY = 'conductor_crate_v13';
 
 const DEFAULT_CRATE_PRESET_IDS = [
+  // kick — steady, broken, acoustic
   'kick-pressure-floor',
   'kick-skip-pulse',
-  'hats-clock-drift',
+  'kick-jazz-room',
+  // hats — straight, euclidean, brushes
   'hats-sixteen-rain',
+  'hats-clock-drift',
+  'hats-brush-sweep',
+  // snare — classic, dry, swing
   'snare-back-alley',
   'snare-shadow-step',
+  // bass — sub, saw, plucked
   'bass-deep-current',
-  'bass-saw-climb',
-  'bass-corner-pressure',
+  'bass-acid-root',
+  'bass-pluck-step',
+  // pad — chords, choir, piano
   'pad-slow-glass',
-  'pad-breath-cycle',
-  'pad-afterimage',
+  'pad-choir-vowel',
+  'pad-piano-chords',
+  // lead — melodic, sax, arpeggio
   'lead-mirror-line',
-  'lead-stab-question',
-  'lead-late-signal',
+  'lead-sax-phrase',
+  'lead-piano-arp',
+  // texture — crackle, air, digital
   'texture-vinyl-crackle',
   'texture-vent-hiss',
+  'texture-coarse-rain',
+  // perc — tabla, rim, sitar
+  'perc-tabla-pulse',
   'perc-rim-clock',
-  'perc-trip-wire',
+  'perc-sitar-ghost',
+  // fx — swell, reverse
   'fx-swell-lift',
-  'fx-freeze-flash',
+  'fx-reverse-swell',
 ];
 
 function presetToCrateVoice(presetId: string, index: number): CrateVoice | null {
