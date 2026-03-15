@@ -1,43 +1,33 @@
 import type { CrateVoice } from '../types';
 import { VOICE_LIBRARY } from './voiceLibrary';
 
-const CRATE_KEY = 'conductor_crate_v13';
+const CRATE_KEY = 'conductor_crate_v14';
 
 const DEFAULT_CRATE_PRESET_IDS = [
-  // kick — steady, broken, acoustic
-  'kick-pressure-floor',
-  'kick-skip-pulse',
-  'kick-jazz-room',
-  // hats — straight, euclidean, brushes
-  'hats-sixteen-rain',
-  'hats-clock-drift',
-  'hats-brush-sweep',
-  // snare — classic, dry, swing
-  'snare-back-alley',
-  'snare-shadow-step',
-  // bass — sub, saw, plucked
-  'bass-deep-current',
-  'bass-acid-root',
-  'bass-pluck-step',
-  // pad — chords, choir, piano
-  'pad-slow-glass',
-  'pad-choir-vowel',
-  'pad-piano-chords',
-  // lead — melodic, sax, arpeggio
-  'lead-mirror-line',
-  'lead-sax-phrase',
-  'lead-piano-arp',
-  // texture — crackle, air, digital
-  'texture-vinyl-crackle',
-  'texture-vent-hiss',
-  'texture-coarse-rain',
-  // perc — tabla, rim, sitar
-  'perc-tabla-pulse',
-  'perc-rim-clock',
-  'perc-sitar-ghost',
-  // fx — swell, reverse
-  'fx-swell-lift',
-  'fx-reverse-swell',
+  // nerve — dark, kinetic
+  'kick-nerve-pressure',
+  'hats-nerve-scatter',
+  'snare-nerve-crack',
+  'bass-nerve-undertow',
+  'pad-nerve-haze',
+  'lead-nerve-wire',
+  'texture-nerve-static',
+  // driftwood — warm, organic
+  'kick-drift-heartbeat',
+  'bass-drift-tide',
+  'pad-drift-amber',
+  'lead-drift-feather',
+  'texture-drift-shore',
+  'perc-drift-bell',
+  'fx-drift-fog',
+  // chrome — clean, precise
+  'kick-chrome-drive',
+  'hats-chrome-grid',
+  'snare-chrome-clap',
+  'bass-chrome-acid',
+  'pad-chrome-field',
+  'lead-chrome-sequence',
+  'fx-chrome-sweep',
 ];
 
 function presetToCrateVoice(presetId: string, index: number): CrateVoice | null {
