@@ -5,6 +5,7 @@ import { CRATE_ROLES } from '../hooks/useTreeNav';
 import { generateRowGrid } from './Punchcard';
 import WorkshopCodeEditor from './WorkshopCodeEditor';
 import { createBlankWorkshopVoice } from '../lib/workshopSeeds';
+import { collectAvailableSetNames, isStarterSet, normalizeSetName } from '../lib/setNames';
 
 interface Props {
   crate: CrateVoice[];
@@ -29,6 +30,7 @@ interface Props {
   onAddToCrate: (voice: CrateVoice) => void;
   onUpdateCrateVoice: (voiceId: string, updates: { name: string; code: string; setName: string }) => void;
   onCreateSet: (setName: string) => void;
+  onDeleteSet: (setName: string, moveToSetName: string) => void;
 }
 
 type DraftState = {
@@ -52,6 +54,13 @@ type ConfirmState = {
 type NewSetState = {
   open: boolean;
   value: string;
+};
+
+type DeleteSetState = {
+  open: boolean;
+  setName: string;
+  voiceCount: number;
+  moveTo: string;
 };
 
 function PulsePreview({ code }: { code: string }) {
@@ -243,6 +252,100 @@ function NewSetModal({
   );
 }
 
+function DeleteSetModal({
+  state,
+  availableTargets,
+  onCancel,
+  onChangeMoveTo,
+  onDelete,
+}: {
+  state: DeleteSetState;
+  availableTargets: string[];
+  onCancel: () => void;
+  onChangeMoveTo: (value: string) => void;
+  onDelete: () => void;
+}) {
+  useEffect(() => {
+    if (!state.open) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCancel();
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        onDelete();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [state.open, onCancel, onDelete]);
+
+  if (!state.open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ background: 'rgba(0,0,0,0.45)' }}
+    >
+      <div
+        className="w-full max-w-lg p-6"
+        style={{ background: '#111127', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 24px 80px rgba(0,0,0,0.45)' }}
+      >
+        <div className="text-[15px] font-semibold text-white">delete set</div>
+        <div className="mt-4 text-[14px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.8)' }}>
+          Delete "{state.setName}"?
+        </div>
+        <div className="mt-4 text-[13px]" style={{ color: 'rgba(255,255,255,0.55)' }}>
+          Voices in this set: {state.voiceCount}
+        </div>
+        {state.voiceCount > 0 && (
+          <div className="mt-4">
+            <div className="mb-2 text-[11px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              Move voices to
+            </div>
+            <select
+              value={state.moveTo}
+              onChange={(event) => onChangeMoveTo(event.target.value)}
+              className="w-full bg-transparent outline-none text-[13px]"
+              style={{
+                color: '#ffffff',
+                border: '1px solid rgba(255,255,255,0.12)',
+                padding: '10px 12px',
+                background: 'rgba(0,0,0,0.15)',
+              }}
+            >
+              <option value="">all</option>
+              {availableTargets.map((setName) => (
+                <option key={setName} value={setName}>
+                  {setName}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div className="mt-6 flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 text-[12px] cursor-pointer"
+            style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
+          >
+            cancel
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="px-4 py-2 text-[12px] cursor-pointer"
+            style={{ border: '1px solid rgba(255,120,120,0.22)', color: '#ff9d84' }}
+          >
+            delete set
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function WorkshopOverlay({
   crate,
   setNames,
@@ -261,6 +364,7 @@ export default function WorkshopOverlay({
   onAddToCrate,
   onUpdateCrateVoice,
   onCreateSet,
+  onDeleteSet,
 }: Props) {
   const [selectedRole, setSelectedRole] = useState<VoiceRole>(initialStageSeed?.role ?? initialRole ?? 'kick');
   const [draft, setDraft] = useState<DraftState>(() => (
@@ -268,13 +372,12 @@ export default function WorkshopOverlay({
   ));
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [newSetState, setNewSetState] = useState<NewSetState>({ open: false, value: '' });
-  const availableSets = useMemo(() => {
-    const found = new Set<string>(setNames);
-    for (const voice of crate) {
-      if (voice.setName) found.add(voice.setName);
-    }
-    return Array.from(found);
-  }, [crate, setNames]);
+  const [deleteSetState, setDeleteSetState] = useState<DeleteSetState>({ open: false, setName: '', voiceCount: 0, moveTo: '' });
+  const availableSets = useMemo(() => collectAvailableSetNames(crate, setNames), [crate, setNames]);
+  const deleteSetTargets = useMemo(
+    () => availableSets.filter((setName) => setName !== deleteSetState.setName),
+    [availableSets, deleteSetState.setName],
+  );
 
   const crateByRole = useMemo(() => {
     const map: Record<string, CrateVoice[]> = {};
@@ -437,11 +540,33 @@ export default function WorkshopOverlay({
   };
 
   const handleCreateSet = () => {
-    const nextSet = newSetState.value.trim().toLowerCase();
+    const nextSet = normalizeSetName(newSetState.value);
     if (!nextSet) return;
     onCreateSet(nextSet);
     setDraft((previous) => ({ ...previous, setName: nextSet }));
     setNewSetState({ open: false, value: '' });
+  };
+
+  const openDeleteSet = (setName: string) => {
+    const voiceCount = crate.filter((voice) => voice.setName === setName).length;
+    const firstTarget = availableSets.find((name) => name !== setName) ?? '';
+    setDeleteSetState({
+      open: true,
+      setName,
+      voiceCount,
+      moveTo: firstTarget,
+    });
+  };
+
+  const handleDeleteSet = () => {
+    if (!deleteSetState.setName) return;
+    onDeleteSet(deleteSetState.setName, deleteSetState.moveTo);
+    setDraft((previous) => (
+      previous.setName === deleteSetState.setName
+        ? { ...previous, setName: deleteSetState.moveTo }
+        : previous
+    ));
+    setDeleteSetState({ open: false, setName: '', voiceCount: 0, moveTo: '' });
   };
 
   return (
@@ -473,20 +598,33 @@ export default function WorkshopOverlay({
             <div className="space-y-1">
               {availableSets.map((setName) => {
                 const isSelectedSet = draft.setName === setName;
+                const canDelete = !isStarterSet(setName);
                 return (
-                  <button
-                    key={setName}
-                    type="button"
-                    onClick={() => setDraft((previous) => ({ ...previous, setName }))}
-                    className="w-full text-left px-2 py-1 text-[10px] cursor-pointer transition-colors"
-                    style={{
-                      color: isSelectedSet ? '#88ff88' : 'rgba(255,255,255,0.38)',
-                      background: isSelectedSet ? 'rgba(136,255,136,0.06)' : 'transparent',
-                      borderLeft: isSelectedSet ? '2px solid #88ff88' : '2px solid transparent',
-                    }}
-                  >
-                    {setName}
-                  </button>
+                  <div key={setName} className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setDraft((previous) => ({ ...previous, setName }))}
+                      className="flex-1 text-left px-2 py-1 text-[10px] cursor-pointer transition-colors"
+                      style={{
+                        color: isSelectedSet ? '#88ff88' : 'rgba(255,255,255,0.38)',
+                        background: isSelectedSet ? 'rgba(136,255,136,0.06)' : 'transparent',
+                        borderLeft: isSelectedSet ? '2px solid #88ff88' : '2px solid transparent',
+                      }}
+                    >
+                      {setName}
+                    </button>
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => openDeleteSet(setName)}
+                        className="px-1.5 py-1 text-[10px] cursor-pointer"
+                        style={{ color: 'rgba(255,255,255,0.28)' }}
+                        aria-label={`Delete ${setName}`}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -754,6 +892,13 @@ export default function WorkshopOverlay({
         onCancel={() => setNewSetState({ open: false, value: '' })}
         onChange={(value) => setNewSetState((previous) => ({ ...previous, value }))}
         onCreate={handleCreateSet}
+      />
+      <DeleteSetModal
+        state={deleteSetState}
+        availableTargets={deleteSetTargets}
+        onCancel={() => setDeleteSetState({ open: false, setName: '', voiceCount: 0, moveTo: '' })}
+        onChangeMoveTo={(value) => setDeleteSetState((previous) => ({ ...previous, moveTo: value }))}
+        onDelete={handleDeleteSet}
       />
     </div>
   );

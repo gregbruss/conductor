@@ -1,17 +1,9 @@
 import type { CrateVoice } from '../types';
 import { VOICE_LIBRARY } from './voiceLibrary';
+import { DEFAULT_SET_NAMES, inferSetName, normalizeSetNames } from './setNames';
 
 const CRATE_KEY = 'conductor_crate_v14';
 const CRATE_SET_KEY = 'conductor_crate_sets_v1';
-const DEFAULT_SET_NAMES = ['chrome', 'driftwood', 'nerve'];
-
-function inferSetName(id: string, name: string): string {
-  const haystack = `${id} ${name}`.toLowerCase();
-  if (haystack.includes('chrome')) return 'chrome';
-  if (haystack.includes('driftwood')) return 'driftwood';
-  if (haystack.includes('nerve')) return 'nerve';
-  return 'set a';
-}
 
 const DEFAULT_CRATE_PRESET_IDS = [
   // nerve — dark, kinetic
@@ -88,21 +80,14 @@ export function saveCrate(crate: CrateVoice[]): void {
   localStorage.setItem(CRATE_KEY, JSON.stringify(crate));
 }
 
-function normalizeSetNames(setNames: string[]): string[] {
-  const normalized = setNames
-    .map((name) => name.trim().toLowerCase())
-    .filter(Boolean);
-  return Array.from(new Set([...DEFAULT_SET_NAMES, ...normalized]));
-}
-
 export function loadSetNames(): string[] {
   try {
     const raw = localStorage.getItem(CRATE_SET_KEY);
-    if (!raw) return DEFAULT_SET_NAMES;
+    if (!raw) return [...DEFAULT_SET_NAMES];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? normalizeSetNames(parsed) : DEFAULT_SET_NAMES;
+    return Array.isArray(parsed) ? normalizeSetNames(parsed) : [...DEFAULT_SET_NAMES];
   } catch {
-    return DEFAULT_SET_NAMES;
+    return [...DEFAULT_SET_NAMES];
   }
 }
 

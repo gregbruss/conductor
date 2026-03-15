@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { CrateVoice } from '../types';
 import type { NavLevel } from '../hooks/useTreeNav';
 import { CRATE_ROLES } from '../hooks/useTreeNav';
+import { collectAvailableSetNames } from '../lib/setNames';
 
 interface Props {
   crate: CrateVoice[];
@@ -36,12 +37,7 @@ export default function SetDock({
   const inVoiceLevel = navLevel === 'crate-role';
 
   const availableSets = useMemo(() => {
-    const found = new Set<string>(setNames);
-    for (const voice of crate) {
-      const setName = voice.setName;
-      if (setName) found.add(setName);
-    }
-    return ['all', ...Array.from(found)];
+    return ['all', ...collectAvailableSetNames(crate, setNames)];
   }, [crate, setNames]);
 
   const [selectedSet, setSelectedSet] = useState<string>('all');

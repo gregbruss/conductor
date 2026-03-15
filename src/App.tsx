@@ -632,6 +632,14 @@ export default function App() {
                 onCreateSet={(setName) => {
                   setCrateSetNames((prev) => prev.includes(setName) ? prev : [...prev, setName]);
                 }}
+                onDeleteSet={(setName, moveToSetName) => {
+                  setCrateSetNames((prev) => prev.filter((name) => name !== setName));
+                  setCrate((prev) => prev.map((voice) => (
+                    voice.setName === setName
+                      ? { ...voice, setName: moveToSetName }
+                      : voice
+                  )));
+                }}
                 onApplyToLane={(layerId, nextCode) => {
                   const targetLayer = layers.find((layer) => layer.id === layerId);
                   if (targetLayer) setStatusMessage(`updated ${targetLayer.label}`);
