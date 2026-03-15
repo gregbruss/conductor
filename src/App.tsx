@@ -117,7 +117,6 @@ function CompactStageLane({
 
 export default function App() {
   const [isCompactLayout, setIsCompactLayout] = useState(false);
-  const [mobileAudioReady, setMobileAudioReady] = useState(false);
   const [view, setView] = useState<AppView>('landing');
   const [code, setCode] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
@@ -216,15 +215,6 @@ export default function App() {
       console.warn('Samples:', samplesError);
     }
   };
-
-  const enableMobileAudio = useCallback(async () => {
-    await ensureSamples();
-    try {
-      window.hush();
-    } catch {}
-    setMobileAudioReady(true);
-    setStatusMessage('sound enabled');
-  }, []);
 
   const buildEvalCode = (codeString: string, muted: Set<string>, solo: string | null): string => {
     const parsed = parseLayers(codeString);
@@ -612,49 +602,18 @@ export default function App() {
             </div>
           ) : !hasCode ? (
             <div className="h-full flex flex-col items-center justify-center px-4 text-center">
-              {isCompactLayout ? (
-                <>
-                  <div className="text-[14px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                    open crate to stage a voice
-                  </div>
-                  <div className="mt-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                    then tap play to hear it
-                  </div>
-                  <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
-                    <button
-                      type="button"
-                      onClick={nav.openCrate}
-                      className="px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] cursor-pointer"
-                      style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
-                    >
-                      open crate
-                    </button>
-                    <button
-                      type="button"
-                      onClick={nav.openWorkshopPanel}
-                      className="px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] cursor-pointer"
-                      style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
-                    >
-                      workshop
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="text-[14px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                    tab to navigate · enter to open · esc to go back
-                  </div>
-                  <div className="mt-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                    press tab to start
-                  </div>
-                  <div className="mt-8 space-y-1.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.18)' }}>
-                    <div>C — Crate (browse your catalog)</div>
-                    <div>W — Workshop (write new pieces)</div>
-                    <div>Spacebar — Play / Stop</div>
-                    <div>R — Record</div>
-                  </div>
-                </>
-              )}
+              <div className="text-[14px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                tab to navigate · enter to open · esc to go back
+              </div>
+              <div className="mt-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                press tab to start
+              </div>
+              <div className="mt-8 space-y-1.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.18)' }}>
+                <div>C — Crate (browse your catalog)</div>
+                <div>W — Workshop (write new pieces)</div>
+                <div>Spacebar — Play / Stop</div>
+                <div>R — Record</div>
+              </div>
             </div>
           ) : (
             <div className="py-3">
@@ -820,42 +779,6 @@ export default function App() {
           if (layer) void removeLayer(layer.id);
         }}
       />
-
-      {isCompactLayout && !mobileAudioReady && (
-        <div
-          className="fixed inset-0 z-40 flex items-center justify-center px-5"
-          style={{ background: 'rgba(0,0,40,0.82)' }}
-        >
-          <div
-            className="w-full max-w-sm p-6 text-center"
-            style={{
-              background: '#111127',
-              border: '1px solid rgba(255,255,255,0.12)',
-              boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
-            }}
-          >
-            <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'rgba(255,255,255,0.35)' }}>
-              mobile audio
-            </div>
-            <div className="mt-4 text-[18px] font-semibold text-white">
-              tap once to enable sound
-            </div>
-            <div className="mt-3 text-[13px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.68)' }}>
-              Mobile browsers keep audio locked until you interact directly.
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                void enableMobileAudio();
-              }}
-              className="mt-6 w-full px-4 py-3 text-[12px] uppercase tracking-[0.16em] cursor-pointer"
-              style={{ border: '1px solid rgba(136,255,136,0.22)', color: '#88ff88' }}
-            >
-              enable audio
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
