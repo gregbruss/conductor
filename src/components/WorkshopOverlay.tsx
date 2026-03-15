@@ -3,6 +3,7 @@ import type { CrateVoice, VoiceRole } from '../types';
 import type { NavLevel } from '../hooks/useTreeNav';
 import { CRATE_ROLES } from '../hooks/useTreeNav';
 import { generateRowGrid } from './Punchcard';
+import WorkshopCodeEditor from './WorkshopCodeEditor';
 import { createBlankWorkshopVoice } from '../lib/workshopSeeds';
 
 interface Props {
@@ -69,6 +70,18 @@ function buildDraftFromVoice(voice: CrateVoice): DraftState {
     name: voice.name,
     code: voice.code,
     stageLayerId: null,
+  };
+}
+
+function buildDraftFromStageSeed(seed: NonNullable<Props['initialStageSeed']>): DraftState {
+  return {
+    sourceId: null,
+    sourceKind: 'stage',
+    baselineName: seed.label,
+    baselineCode: seed.code,
+    name: seed.label,
+    code: seed.code,
+    stageLayerId: seed.layerId,
   };
 }
 
@@ -163,19 +176,7 @@ export default function WorkshopOverlay({
 }: Props) {
   const [selectedRole, setSelectedRole] = useState<VoiceRole>(initialStageSeed?.role ?? initialRole ?? 'kick');
   const [draft, setDraft] = useState<DraftState>(() => (
-    initialStageSeed
-      ? {
-          sourceId: initialStageSeed.layerId,
-          sourceKind: 'stage',
-          baselineName: initialStageSeed.label,
-          baselineCode: initialStageSeed.code,
-          name: initialStageSeed.label,
-          code: initialStageSeed.code,
-          stageLayerId: initialStageSeed.layerId,
-        }
-      : {
-          ...buildEmptyDraft(),
-        }
+    initialStageSeed ? buildDraftFromStageSeed(initialStageSeed) : { ...buildEmptyDraft() }
   ));
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
 
@@ -208,6 +209,12 @@ export default function WorkshopOverlay({
       }
     : null;
   const isDraftPreviewing = previewingId === draftVoice?.id;
+
+  useEffect(() => {
+    if (!initialStageSeed) return;
+    setSelectedRole(initialStageSeed.role);
+    setDraft(buildDraftFromStageSeed(initialStageSeed));
+  }, [initialStageSeed]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -294,17 +301,22 @@ export default function WorkshopOverlay({
     setDraft(buildDraftFromVoice(savedVoice));
   };
 
-  const handleApplyToLane = () => {
-    if (!draft.stageLayerId || !draft.code.trim()) return;
-    onApplyToLane(draft.stageLayerId, draft.code);
-    setDraft((previous) => ({
-      ...previous,
-      baselineCode: previous.code,
-    }));
-  };
-
   const handleClose = () => {
     guardDiscard('Close the workshop and discard current edits?', onClose);
+  };
+
+  const handleUpdate = () => {
+    if (!draftVoice) return;
+    if (draft.sourceKind === 'stage' && draft.stageLayerId) {
+      onApplyToLane(draft.stageLayerId, draft.code);
+      setDraft((previous) => ({
+        ...previous,
+        baselineName: previous.name,
+        baselineCode: previous.code,
+      }));
+      return;
+    }
+    onPreview(draftVoice);
   };
 
   return (
@@ -356,14 +368,18 @@ export default function WorkshopOverlay({
                   {draft.sourceKind === 'crate'
                     ? `editing saved ${selectedRole}`
                     : draft.sourceKind === 'stage'
-                      ? `loaded from stage`
+                      ? `editing staged ${selectedRole}`
                     : draft.sourceKind === 'new'
                       ? `new ${selectedRole}`
                       : `${selectedRole} workbench`}
                 </div>
                 {hasDraft && (
                   <span className="text-[10px]" style={{ color: isDirty ? '#88ff88' : 'rgba(255,255,255,0.22)' }}>
-                    {isDraftPreviewing ? `previewing: ${draftVoice?.name ?? 'draft'}` : (isDirty ? 'unsaved changes' : 'saved')}
+                    {draft.sourceKind === 'stage'
+                      ? `live target: ${draft.baselineName}`
+                      : isDraftPreviewing
+                        ? `previewing: ${draftVoice?.name ?? 'draft'}`
+                        : (isDirty ? 'unsaved changes' : 'saved')}
                   </span>
                 )}
               </div>
@@ -394,81 +410,78 @@ export default function WorkshopOverlay({
             </div>
 
             <div className="mt-3">
-              <textarea
-                value={draft.code}
-                onChange={(e) => setDraft((previous) => ({ ...previous, code: e.target.value }))}
-                className="w-full min-h-[280px] resize-y bg-transparent outline-none text-sm leading-relaxed"
-                style={{ color: '#ffffff', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 10px' }}
-                spellCheck={false}
+              <WorkshopCodeEditor
+                code={draft.code}
+                onChange={(nextCode) => setDraft((previous) => ({ ...previous, code: nextCode }))}
                 placeholder={`Write ${selectedRole} code here...`}
               />
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  if (!draftVoice) return;
-                  if (isDraftPreviewing) onStopPreview();
-                  else onPreview(draftVoice);
-                }}
-                disabled={!draftVoice}
-                className="px-2.5 py-1 cursor-pointer"
-                style={{
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  color: !draftVoice ? 'rgba(255,255,255,0.2)' : (isDraftPreviewing ? '#88ff88' : '#ffffff'),
-                }}
-              >
-                {isDraftPreviewing ? 'stop preview' : 'preview'}
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={!draftVoice || !draftVoice.code.trim()}
-                className="px-2.5 py-1 cursor-pointer"
-                style={{
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  color: !draftVoice || !draftVoice.code.trim() ? 'rgba(255,255,255,0.2)' : '#ffffff',
-                }}
-              >
-                {draft.sourceKind === 'crate' ? (isDirty ? 'save' : 'saved') : 'save'}
-              </button>
+            <div className="mt-3 flex items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleUpdate}
+                  disabled={!draftVoice}
+                  className="px-2.5 py-1 cursor-pointer"
+                  style={{
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    color: !draftVoice ? 'rgba(255,255,255,0.2)' : '#ffffff',
+                  }}
+                >
+                  {draft.sourceKind === 'stage' ? 'update live' : 'update'}
+                </button>
+                {draft.sourceKind !== 'stage' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!draftVoice) return;
+                      if (isDraftPreviewing) onStopPreview();
+                      else onPreview(draftVoice);
+                    }}
+                    disabled={!draftVoice}
+                    className="px-2.5 py-1 cursor-pointer"
+                    style={{
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      color: !draftVoice ? 'rgba(255,255,255,0.2)' : (isDraftPreviewing ? '#88ff88' : '#ffffff'),
+                    }}
+                  >
+                    {isDraftPreviewing ? 'stop preview' : 'preview'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={!draftVoice || !draftVoice.code.trim()}
+                  className="px-2.5 py-1 cursor-pointer"
+                  style={{
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    color: !draftVoice || !draftVoice.code.trim() ? 'rgba(255,255,255,0.2)' : '#ffffff',
+                  }}
+                >
+                  {draft.sourceKind === 'stage'
+                    ? 'save to crate'
+                    : draft.sourceKind === 'crate'
+                      ? (isDirty ? 'save' : 'saved')
+                      : 'save'}
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => draftVoice && onAddToStage(draftVoice)}
                 disabled={!draftVoice}
-                className="px-2.5 py-1 cursor-pointer"
+                className="px-2.5 py-1 cursor-pointer shrink-0"
                 style={{
                   border: '1px solid rgba(136,255,136,0.18)',
                   color: draftVoice ? '#88ff88' : 'rgba(255,255,255,0.2)',
                 }}
               >
-                stage
+                {draft.sourceKind === 'stage' ? 'stage as new' : 'stage'}
               </button>
-              {draft.sourceKind === 'stage' && draft.stageLayerId && (
-                <button
-                  type="button"
-                  onClick={handleApplyToLane}
-                  disabled={!draft.code.trim()}
-                  className="px-2.5 py-1 cursor-pointer"
-                  style={{
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    color: draft.code.trim() ? '#ffffff' : 'rgba(255,255,255,0.2)',
-                  }}
-                >
-                  apply to lane
-                </button>
-              )}
             </div>
 
             <div className="mt-3">
               <PulsePreview code={draft.code} />
             </div>
-
-            {draft.sourceKind === 'stage' && (
-              <div className="mt-3 text-[10px]" style={{ color: 'rgba(255,255,255,0.28)' }}>
-                source: {draft.baselineName}
-              </div>
-            )}
           </div>
 
           <div className="flex items-center justify-between mb-4">
@@ -485,21 +498,28 @@ export default function WorkshopOverlay({
               const cardHighlighted = navLevel === 'workshop' && workshopTabIndex === CRATE_ROLES.length + idx;
 
               return (
-                <button
+                <div
                   key={voice.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => loadVoice(voice)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      loadVoice(voice);
+                    }
+                  }}
                   className="w-full text-left cursor-pointer"
                   style={{
                     border: cardHighlighted
                       ? '2px solid rgba(136,255,136,0.4)'
                       : isLoaded
-                        ? '1px solid rgba(136,255,136,0.2)'
+                        ? '1px solid rgba(136,255,136,0.28)'
                         : '1px solid rgba(255,255,255,0.08)',
                     background: cardHighlighted
                       ? 'rgba(136,255,136,0.06)'
                       : isLoaded
-                        ? 'rgba(136,255,136,0.03)'
+                        ? 'rgba(136,255,136,0.05)'
                         : 'rgba(255,255,255,0.02)',
                   }}
                 >
@@ -512,7 +532,8 @@ export default function WorkshopOverlay({
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        onPreview(voice);
+                        if (isPreviewing) onStopPreview();
+                        else onPreview(voice);
                       }}
                       className="px-2 py-0.5 text-[10px] cursor-pointer"
                       style={{
@@ -520,18 +541,7 @@ export default function WorkshopOverlay({
                         color: isPreviewing ? '#88ff88' : 'rgba(255,255,255,0.6)',
                       }}
                     >
-                      {isPreviewing ? '■ stop' : '▶'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        loadVoice(voice);
-                      }}
-                      className="px-2 py-0.5 text-[10px] cursor-pointer"
-                      style={{ border: '1px solid rgba(255,255,255,0.08)', color: isLoaded ? '#88ff88' : 'rgba(255,255,255,0.6)' }}
-                    >
-                      load
+                      {isPreviewing ? 'stop' : 'preview'}
                     </button>
                     {!isStaged && (
                       <button
@@ -546,26 +556,12 @@ export default function WorkshopOverlay({
                         stage
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onRemoveFromCrate(voice.id);
-                        if (draft.sourceId === voice.id) {
-                          setDraft(buildEmptyDraft());
-                        }
-                      }}
-                      className="px-2 py-0.5 text-[10px] cursor-pointer"
-                      style={{ border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.25)' }}
-                    >
-                      ×
-                    </button>
                   </div>
 
                   <div className="px-3 pb-2">
                     <PulsePreview code={voice.code} />
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>

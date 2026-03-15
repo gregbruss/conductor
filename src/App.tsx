@@ -33,10 +33,15 @@ function extractBpm(code: string): number {
   return match ? parseFloat(match[1]) : 120;
 }
 
+function buildBaseCodeForNewVoice(currentCode: string, bpm: number): string {
+  if (currentCode.trim()) return currentCode;
+  return `setCps(${Math.round(bpm)}/60/4)`;
+}
+
 function guessRole(label: string, code = ''): VoiceRole | null {
   const haystack = `${label} ${code}`.toLowerCase();
   if (haystack.includes('kick') || haystack.includes('bd')) return 'kick';
-  if (haystack.includes('hat') || haystack.includes('hh')) return 'hats';
+  if (haystack.includes('hat') || haystack.includes('hh') || haystack.includes('oh')) return 'hats';
   if (haystack.includes('snare') || haystack.includes('sd') || haystack.includes('clap') || haystack.includes('cp')) return 'snare';
   if (haystack.includes('bass') || haystack.includes('sub')) return 'bass';
   if (haystack.includes('pad') || haystack.includes('chord') || haystack.includes('supersaw') || haystack.includes('rhodes')) return 'pad';
@@ -45,12 +50,6 @@ function guessRole(label: string, code = ''): VoiceRole | null {
   if (haystack.includes('perc') || haystack.includes('rim') || haystack.includes('tom') || haystack.includes('tabla')) return 'perc';
   if (haystack.includes('fx') || haystack.includes('cr') || haystack.includes('impact') || haystack.includes('swell')) return 'fx';
   return null;
-}
-
-
-function buildBaseCodeForNewVoice(currentCode: string, bpm: number): string {
-  if (currentCode.trim()) return currentCode;
-  return `setCps(${Math.round(bpm)}/60/4)`;
 }
 
 function formatDuration(totalSeconds: number): string {
@@ -138,6 +137,7 @@ export default function App() {
   const isPlayingRef = useRef(false);
   const mutedIdsRef = useRef<Set<string>>(new Set());
   const soloIdRef = useRef<string | null>(null);
+  const workshopAudioQueue = useRef<Promise<void>>(Promise.resolve());
 
   isPlayingRef.current = isPlaying;
   mutedIdsRef.current = mutedIds;
@@ -185,6 +185,7 @@ export default function App() {
       try {
         if (typeof window.samples === 'function') {
           await window.samples('github:tidalcycles/dirt-samples');
+          await window.samples('https://raw.githubusercontent.com/felixroos/dough-samples/main/tidal-drum-machines.json');
         }
       } catch (samplesError) {
         console.warn('Samples:', samplesError);
@@ -210,7 +211,7 @@ export default function App() {
     try {
       await ensureStrudel();
       const evalCode = buildEvalCode(codeString, muted ?? mutedIdsRef.current, solo ?? soloIdRef.current);
-      window.evaluate(evalCode);
+      await Promise.resolve(window.evaluate(evalCode));
       setError(null);
       return true;
     } catch (evalError: any) {
@@ -219,16 +220,23 @@ export default function App() {
     }
   };
 
+  const queueWorkshopAudio = useCallback(async (operation: () => Promise<void>) => {
+    const run = workshopAudioQueue.current.then(operation, operation);
+    workshopAudioQueue.current = run.catch(() => {});
+    await run;
+  }, []);
+
   const restoreStageAudio = useCallback(async () => {
-    if (isPlayingRef.current && code) {
-      await evalStrudel(code, mutedIdsRef.current, soloIdRef.current);
-    } else {
+    await queueWorkshopAudio(async () => {
       try {
         window.hush();
       } catch {}
-    }
-    setPreviewVoice(null);
-  }, [code]);
+      if (isPlayingRef.current && code) {
+        await evalStrudel(code, mutedIdsRef.current, soloIdRef.current);
+      }
+      setPreviewVoice(null);
+    });
+  }, [code, queueWorkshopAudio]);
 
   const handleSliderChange = useCallback((globalIndex: number, value: number) => {
     setCode((previousCode) => {
@@ -325,10 +333,15 @@ export default function App() {
       await restoreStageAudio();
       return;
     }
-    const previewBase = code.trim() ? code : buildBaseCodeForNewVoice('', bpm);
-    const previewCode = `${previewBase}\n\n// ${voice.name}\n${voice.code}`;
-    const ok = await evalStrudel(previewCode, mutedIds, soloId);
-    if (ok) setPreviewVoice(voice);
+    await queueWorkshopAudio(async () => {
+      const previewBase = code.trim() ? code : buildBaseCodeForNewVoice('', bpm);
+      const previewCode = `${previewBase}\n\n// ${voice.name}\n${voice.code}`;
+      try {
+        window.hush();
+      } catch {}
+      const ok = await evalStrudel(previewCode, mutedIdsRef.current, soloIdRef.current);
+      if (ok) setPreviewVoice(voice);
+    });
   };
 
 
