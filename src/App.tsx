@@ -116,6 +116,7 @@ function CompactStageLane({
 }
 
 export default function App() {
+  const [isCompactLayout, setIsCompactLayout] = useState(false);
   const [view, setView] = useState<AppView>('landing');
   const [code, setCode] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
@@ -133,6 +134,7 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const strudelReady = useRef(false);
+  const samplesReady = useRef(false);
   const evalTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingCode = useRef('');
   const isPlayingRef = useRef(false);
@@ -167,6 +169,15 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isRecording]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const media = window.matchMedia('(max-width: 900px)');
+    const update = () => setIsCompactLayout(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
   const { preamble, layers } = useMemo(() => {
     if (!code) return { preamble: '', layers: [] };
     return parseLayers(code);
@@ -187,15 +198,21 @@ export default function App() {
     if (strudelReady.current) return;
     if (typeof window.initStrudel === 'function') {
       await window.initStrudel();
-      try {
-        if (typeof window.samples === 'function') {
-          await window.samples('github:tidalcycles/dirt-samples');
-          await window.samples('https://raw.githubusercontent.com/felixroos/dough-samples/main/tidal-drum-machines.json');
-        }
-      } catch (samplesError) {
-        console.warn('Samples:', samplesError);
-      }
       strudelReady.current = true;
+    }
+  };
+
+  const ensureSamples = async () => {
+    await ensureStrudel();
+    if (samplesReady.current) return;
+    try {
+      if (typeof window.samples === 'function') {
+        await window.samples('github:tidalcycles/dirt-samples');
+        await window.samples('https://raw.githubusercontent.com/felixroos/dough-samples/main/tidal-drum-machines.json');
+      }
+      samplesReady.current = true;
+    } catch (samplesError) {
+      console.warn('Samples:', samplesError);
     }
   };
 
@@ -214,7 +231,7 @@ export default function App() {
     solo?: string | null,
   ): Promise<boolean> => {
     try {
-      await ensureStrudel();
+      await ensureSamples();
       const evalCode = buildEvalCode(codeString, muted ?? mutedIdsRef.current, solo ?? soloIdRef.current);
       await Promise.resolve(window.evaluate(evalCode));
       setError(null);
@@ -472,11 +489,14 @@ export default function App() {
 
 
   if (view === 'landing') {
-    return <LandingPage onEnter={() => setView('perform')} />;
+    return <LandingPage onEnter={async () => {
+      await ensureStrudel();
+      setView('perform');
+    }} />;
   }
 
   return (
-    <div className="h-screen flex flex-col select-none overflow-hidden" style={{ background: '#0000cc' }}>
+    <div className="flex flex-col select-none overflow-hidden" style={{ background: '#0000cc', height: '100dvh', minHeight: '100dvh' }}>
       <div className="px-4 py-3 shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.25)' }}>
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -491,7 +511,7 @@ export default function App() {
         </div>
       </div>
 
-      <div className="shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.15)', minHeight: '80px' }}>
+      <div className="shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.15)', minHeight: isCompactLayout ? '62px' : '80px' }}>
         <div className="px-4 py-2 text-[10px] uppercase tracking-[0.2em]" style={{ color: 'rgba(255,255,255,0.35)' }}>
           score
         </div>
@@ -517,7 +537,49 @@ export default function App() {
         )}
       </div>
 
-      <div className="flex-1 flex min-h-0">
+      {isCompactLayout && (
+        <div className="shrink-0 px-3 py-2 flex items-center gap-2 overflow-x-auto" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.14)' }}>
+          <button
+            type="button"
+            onClick={nav.openCrate}
+            className="px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] cursor-pointer whitespace-nowrap"
+            style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
+          >
+            crate
+          </button>
+          <button
+            type="button"
+            onClick={nav.workshopOpen ? nav.closeWorkshopPanel : nav.openWorkshopPanel}
+            className="px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] cursor-pointer whitespace-nowrap"
+            style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
+          >
+            {nav.workshopOpen ? 'close workshop' : 'workshop'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (isPlaying) void handleStop();
+              else void handlePlay();
+            }}
+            className="px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] cursor-pointer whitespace-nowrap"
+            style={{ border: '1px solid rgba(136,255,136,0.18)', color: isPlaying ? '#ff9d84' : '#88ff88' }}
+          >
+            {isPlaying ? 'stop' : 'play'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void handleRecordToggle();
+            }}
+            className="px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] cursor-pointer whitespace-nowrap"
+            style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
+          >
+            {isRecording ? 'stop rec' : 'record'}
+          </button>
+        </div>
+      )}
+
+      <div className="flex-1 flex min-h-0 relative">
         {/* Left: Stage area */}
         <div className="flex-1 overflow-auto" style={{ background: 'rgba(0,0,0,0.08)' }}>
           {savedTake ? (
@@ -590,10 +652,17 @@ export default function App() {
         <div
           className="shrink-0 min-h-0"
           style={{
-            width: nav.workshopOpen ? 'min(52vw, 760px)' : '22px',
-            borderLeft: '1px solid rgba(255,255,255,0.12)',
+            width: isCompactLayout
+              ? (nav.workshopOpen ? '100vw' : '18px')
+              : (nav.workshopOpen ? 'min(52vw, 760px)' : '22px'),
+            borderLeft: isCompactLayout && nav.workshopOpen ? 'none' : '1px solid rgba(255,255,255,0.12)',
             background: 'rgba(0,0,0,0.18)',
             transition: 'width 180ms ease',
+            position: isCompactLayout && nav.workshopOpen ? 'absolute' : 'relative',
+            right: 0,
+            top: 0,
+            bottom: 0,
+            zIndex: isCompactLayout && nav.workshopOpen ? 30 : 'auto',
           }}
         >
           {nav.workshopOpen ? (

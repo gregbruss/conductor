@@ -290,8 +290,13 @@ Workshop exists for:
 ┌ WORKSHOP ────────────────────────────────────────────────────────────────┐
 │ WORKSHOP                                                        [ × ]    │
 ├───────────────────────────────────────────────────────────────────────────┤
-│ kick 3 │ KICK WORKBENCH                                                  │
-│ hats 3 │                                                                  │
+│ MY SETS │ chrome                                                          │
+│ driftwood                                                                │
+│ nerve                                                                    │
+│        │ kick 1                                                           │
+│        │ hats 0                                                           │
+│        │ ...                                                              │
+│        │ KICK WORKBENCH                               set: [ chrome ▼ ]   │
 │ ...    │ name: [ mondo-kick                                           ]   │
 │        │                                                                  │
 │        │ $: s("bd bd bd bd")                                             │
@@ -313,6 +318,9 @@ Workshop exists for:
 - User expects workshop to be primarily a place to write new Strudel pieces.
 - User expects the editor to dominate the panel.
 - User expects the workshop header to stay simple: title and close.
+- User expects workshop to show set context while authoring.
+- User expects the `My Sets` section to explain which collection they are working inside.
+- User expects the `set:` dropdown to be how they move the current voice between sets.
 - User expects `update` to re-evaluate the current draft against the current stage.
 - User expects `preview` to audition the current draft with the live stage still playing.
 - User expects `save` to write the draft to crate.
@@ -489,6 +497,8 @@ kick crate · 3 voices
 - User expects `stage` to stage that saved version directly.
 - User expects the lower list to support the editor, not compete with it.
 - User expects the loaded row to be easy to spot.
+- User expects the lower list to reflect the currently selected set.
+- User expects changing set context to change the lower list immediately.
 
 ---
 
@@ -641,6 +651,104 @@ Examples:
 
 ---
 
+## Crate With Set Filters
+
+```text
+┌ CRATE ─────────────────────────────────────────────────────────────────────┐
+│ CRATE                                                                     │
+├────────────────────────────────────────────────────────────────────────────┤
+│ [ all ] [ chrome ] [ driftwood ] [ nerve ] [ los angeles ]               │
+├────────────────────────────────────────────────────────────────────────────┤
+│ KICK        HATS        SNARE       BASS        PAD        LEAD           │
+│ chrome      chrome      chrome      chrome      chrome     chrome         │
+│ drive       grid        clap        acid        field      sequence       │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### User expectations
+
+- User expects crate to have a simple way to filter voices by set.
+- User expects built-in collections like `chrome`, `driftwood`, and `nerve` to be visible as coherent musical worlds.
+- User expects clicking a set tab to immediately change the visible crate contents.
+- User expects the role columns to remain stable while the filter changes.
+- User expects `all` to remain available as a fallback view.
+- User expects this to solve the confusion of mixed-set voices appearing together with no structure.
+
+---
+
+## Workshop Set Context
+
+```text
+┌ WORKSHOP ───────────────────────┐
+│ MY SETS                         │
+│ chrome                          │
+│ driftwood                       │
+│ nerve                           │
+│ los angeles                     │
+│                                 │
+│ kick 1                          │
+│ hats 0                          │
+│ snare 0                         │
+│ bass 1                          │
+└─────────────────────────────────┘
+```
+
+### User expectations
+
+- User expects set context to stay visible while working in workshop.
+- User expects the left rail to show both:
+  - which set is active
+  - how many voices of each role exist in that set
+- User expects changing the selected set to change the role counts and lower crate list.
+- User expects `My Sets` to feel like lightweight context, not a second navigation system.
+- User expects workshop and crate to share the same set model.
+
+---
+
+## Set Assignment Happens In Workshop
+
+```text
+KICK WORKBENCH                               set: [ chrome ▼ ]
+
+chrome
+driftwood
+nerve
++ new set
+```
+
+### User expectations
+
+- User expects set assignment to happen where saving happens.
+- User expects workshop to show which set the current voice belongs to, or will be saved into.
+- User expects the dropdown to be the clean way to move a voice between sets.
+- User expects new sets to be created from this flow, not from crate header chrome.
+- User expects crate to remain mostly a browser, not a management console.
+
+---
+
+## New Set Creation
+
+```text
+┌ new set ───────────────────────────────────────────────┐
+│ set name                                               │
+│ [ los angeles                                       ]  │
+│                                                        │
+│ [ cancel ]                           [ create set ]    │
+└────────────────────────────────────────────────────────┘
+```
+
+### User expectations
+
+- User expects new set creation to match the app’s visual language.
+- User expects not to see a browser-native prompt.
+- User expects creating a set to be lightweight.
+- User expects the newly created set to become available immediately in:
+  - the workshop set picker
+  - the crate set filters
+  - the `My Sets` list
+
+---
+
 ## Before, During, And After The Set
 
 ### Before the set
@@ -676,27 +784,23 @@ Examples:
 ## Crate As Library View
 
 ```text
-┌ CRATE ───────────────────────────────────────────────────────────────────┐
-│ KICK · 4                                                                │
-│ pressure floor                                                          │
-│ skip pulse                                                              │
-│ jazz room                                                               │
-│ mondo-kick                                                              │
-│                                                                         │
-│ HATS · 5                                                                │
-│ sixteen rain                                                            │
-│ clock drift                                                             │
-│ brush sweep                                                             │
-└──────────────────────────────────────────────────────────────────────────┘
+┌ CRATE ─────────────────────────────────────────────────────────────────────┐
+│ [ all ] [ chrome ] [ driftwood ] [ nerve ] [ los angeles ]               │
+├────────────────────────────────────────────────────────────────────────────┤
+│ KICK        HATS        SNARE       BASS        PAD        LEAD           │
+│ drive       grid        clap        acid        field      sequence       │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### User expectations
 
 - User expects crate to be a saved-library surface, not a live-performance surface.
-- User expects crate items to be grouped by role.
+- User expects crate items to be grouped by role within the selected set.
+- User expects set filters to sit above the role columns.
 - User expects staged pieces to remain traceable in the crate.
 - User expects crate to support browsing and comparison quickly.
 - User expects crate to stay readable even as it grows.
+- User expects starter sets and personal sets to coexist in one simple model.
 
 ---
 
@@ -739,6 +843,43 @@ While not all of this may be implemented yet, the session direction implies:
 - User expects strong live states to be worth capturing.
 - User expects prepared starting points to reduce setup friction.
 - User expects the product to support both planned and emergent structure.
+
+---
+
+## Deleting Custom Sets Safely
+
+```text
+MY SETS
+chrome
+driftwood
+nerve
+los angeles                  ×
+```
+
+Then:
+
+```text
+┌ delete set ─────────────────────────────────────────────┐
+│ Delete "los angeles"?                                   │
+│                                                         │
+│ Voices in this set: 3                                   │
+│                                                         │
+│ Move voices to: [ all ▼ ]                               │
+│                                                         │
+│ [ cancel ]                              [ delete set ]  │
+└─────────────────────────────────────────────────────────┘
+```
+
+### User expectations
+
+- User expects custom sets to be deletable from the place where sets are visible.
+- User expects starter sets like `chrome`, `driftwood`, and `nerve` to be protected.
+- User expects set deletion to require confirmation.
+- User expects the app not to silently destroy saved voices when deleting a set.
+- User expects voices from a deleted set to be movable into:
+  - `all`
+  - or another existing set
+- User expects deleting the active set to fall back cleanly to another valid set.
 
 ---
 
@@ -1009,6 +1150,7 @@ Hydra  = what does the set feel like
 ```text
 Write small pieces
 Save them to crate
+Organize them into sets
 Stage them into a live set
 Edit the live set intentionally
 Return to workshop when you need more space
@@ -1018,6 +1160,7 @@ Return to workshop when you need more space
 
 - User expects Conductor to make composition feel modular.
 - User expects pieces to move naturally between workshop, crate, and stage.
+- User expects pieces to accumulate into named sets over time.
 - User expects the app to support both composing and performing.
 - User expects the product story to stay understandable even as features grow.
 
@@ -1101,6 +1244,9 @@ By the end of the session, these were considered working well enough to ship:
 - the workshop/stage/crate split
 - staged-source editing in workshop
 - inline sliders in workshop
+- crate set filtering
+- workshop set assignment and `My Sets`
+- safe custom set deletion
 - clearer authoring vs live-edit semantics
 - a simpler, more practical score direction
 - a coherent music-first product story

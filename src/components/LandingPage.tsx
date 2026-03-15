@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 interface Props {
-  onEnter: () => void;
+  onEnter: () => void | Promise<void>;
 }
 
 function PulseGrid() {
@@ -102,8 +102,8 @@ function PulseGrid() {
 
 export default function LandingPage({ onEnter }: Props) {
   return (
-    <div className="h-screen" style={{ background: '#0000cc' }}>
-      <section className="h-screen px-6 py-6 lg:px-10">
+    <div style={{ background: '#0000cc', height: '100dvh', minHeight: '100dvh' }}>
+      <section className="px-5 py-5 lg:px-10" style={{ height: '100dvh', minHeight: '100dvh' }}>
         <div className="flex items-center justify-between text-[11px]">
           <div className="font-bold tracking-[0.22em] text-white">CONDUCTOR</div>
           <button
@@ -115,23 +115,23 @@ export default function LandingPage({ onEnter }: Props) {
           </button>
         </div>
 
-        <div className="relative mt-10 overflow-hidden px-6 py-16 lg:px-12 lg:py-24" style={{ minHeight: '76vh' }}>
+        <div className="relative mt-6 overflow-hidden px-5 py-12 lg:mt-10 lg:px-12 lg:py-24" style={{ minHeight: '76svh' }}>
           <div
             className="pointer-events-none absolute inset-0"
             style={{ background: 'radial-gradient(circle at center, rgba(0,0,204,0) 0%, rgba(0,0,204,0.35) 45%, rgba(0,0,204,0.92) 100%)' }}
           />
           <PulseGrid />
           <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center text-center">
-            <div className="max-w-2xl text-3xl font-bold leading-tight text-white lg:text-5xl">
+            <div className="max-w-2xl text-2xl font-bold leading-tight text-white lg:text-5xl">
               A live instrument for shaping music in real time
             </div>
-            <div className="mt-6 max-w-2xl text-sm leading-7 lg:text-base" style={{ color: 'rgba(255,255,255,0.72)' }}>
+            <div className="mt-5 max-w-2xl text-sm leading-6 lg:mt-6 lg:text-base lg:leading-7" style={{ color: 'rgba(255,255,255,0.72)' }}>
               Conductor is a new kind of musical instrument. Code-powered voices you can shape, layer,
               and perform live. An ensemble that breathes, resists, and responds to your touch.
             </div>
             <button
               onClick={onEnter}
-              className="mt-10 px-6 py-3 text-sm font-bold tracking-[0.18em] cursor-pointer transition-all"
+              className="mt-8 px-6 py-3 text-sm font-bold tracking-[0.18em] cursor-pointer transition-all lg:mt-10"
               style={{ color: '#ffffff', border: '1px solid rgba(255,255,255,0.16)' }}
             >
               ENTER THE STAGE
