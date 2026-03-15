@@ -1,5 +1,5 @@
 {
   "name": "Conductor",
-  "description": "An AI-native, friendly version of Strudel where you describe how you want the music to sound in plain language, and an AI writes the Strudel code for you in real-time.",
+  "description": "A live instrument for shaping music in real time. Built on Strudel.",
   "requestFramePermissions": []
 }
