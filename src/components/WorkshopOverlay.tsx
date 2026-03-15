@@ -4,7 +4,6 @@ import type { NavLevel } from '../hooks/useTreeNav';
 import { CRATE_ROLES } from '../hooks/useTreeNav';
 import { generateRowGrid } from './Punchcard';
 import { createBlankWorkshopVoice } from '../lib/workshopSeeds';
-import { SliderRow, updateSliderInCode } from './InteractiveCode';
 
 interface Props {
   crate: CrateVoice[];
@@ -46,8 +45,6 @@ type ConfirmState = {
   onConfirm: () => void;
 } | null;
 
-type WorkbenchView = 'code' | 'visual' | 'both';
-
 function PulsePreview({ code }: { code: string }) {
   const grid = generateRowGrid(code);
   return (
@@ -85,119 +82,6 @@ function buildEmptyDraft(): DraftState {
     code: '',
     stageLayerId: null,
   };
-}
-
-function parsePitch(note: string): number | null {
-  const match = note.trim().match(/^([a-g])(b|#)?(\d)$/i);
-  if (!match) return null;
-  const [, baseRaw, accidental = '', octaveRaw] = match;
-  const base = baseRaw.toLowerCase();
-  const semitones: Record<string, number> = {
-    c: 0,
-    d: 2,
-    e: 4,
-    f: 5,
-    g: 7,
-    a: 9,
-    b: 11,
-  };
-  let value = semitones[base];
-  if (accidental === 'b') value -= 1;
-  if (accidental === '#') value += 1;
-  return value + (parseInt(octaveRaw, 10) * 12);
-}
-
-function extractPitchSequence(code: string, cols: number = 16): Array<number | null> {
-  const noteMatch = code.match(/note\(\s*["'`](.+?)["'`]\s*\)/s);
-  if (!noteMatch) return [];
-  const tokens = noteMatch[1].match(/[a-g](?:b|#)?\d/gi) ?? [];
-  return tokens.slice(0, cols).map((token) => parsePitch(token)).filter((value): value is number => value !== null);
-}
-
-function VisualTabs({
-  value,
-  onChange,
-}: {
-  value: WorkbenchView;
-  onChange: (value: WorkbenchView) => void;
-}) {
-  const tabs: WorkbenchView[] = ['code', 'visual', 'both'];
-  return (
-    <div className="flex items-center gap-1">
-      {tabs.map((tab) => (
-        <button
-          key={tab}
-          type="button"
-          onClick={() => onChange(tab)}
-          className="px-2 py-0.5 text-[10px] uppercase cursor-pointer"
-          style={{
-            border: `1px solid ${value === tab ? 'rgba(136,255,136,0.25)' : 'rgba(255,255,255,0.08)'}`,
-            color: value === tab ? '#88ff88' : 'rgba(255,255,255,0.45)',
-          }}
-        >
-          {tab}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function DraftVisual({ code }: { code: string }) {
-  const pitchSequence = extractPitchSequence(code);
-  const rhythmGrid = generateRowGrid(code, 16);
-
-  if (pitchSequence.length > 0) {
-    const max = Math.max(...pitchSequence);
-    const min = Math.min(...pitchSequence);
-    const rows = Math.min(Math.max(max - min + 1, 5), 12);
-    const normalized = pitchSequence.map((pitch) => Math.min(rows - 1, Math.max(0, max - pitch)));
-
-    return (
-      <div
-        className="grid gap-[3px] p-3"
-        style={{
-          gridTemplateColumns: `repeat(16, minmax(0, 1fr))`,
-          gridTemplateRows: `repeat(${rows}, 12px)`,
-          border: '1px solid rgba(255,255,255,0.08)',
-          background: 'rgba(255,255,255,0.02)',
-        }}
-      >
-        {Array.from({ length: rows * 16 }, (_, index) => {
-          const row = Math.floor(index / 16);
-          const col = index % 16;
-          const active = normalized[col] === row;
-          return (
-            <div
-              key={index}
-              style={{
-                background: active ? 'rgba(168,255,255,0.9)' : 'rgba(255,255,255,0.04)',
-                boxShadow: active ? '0 0 0 1px rgba(168,255,255,0.18) inset' : 'none',
-              }}
-            />
-          );
-        })}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className="grid gap-[4px] p-3"
-      style={{
-        gridTemplateColumns: 'repeat(16, minmax(0, 1fr))',
-        border: '1px solid rgba(255,255,255,0.08)',
-        background: 'rgba(255,255,255,0.02)',
-      }}
-    >
-      {rhythmGrid.map((active, index) => (
-        <div
-          key={index}
-          className="h-8"
-          style={{ background: active ? 'rgba(168,255,255,0.9)' : 'rgba(255,255,255,0.04)' }}
-        />
-      ))}
-    </div>
-  );
 }
 
 function ConfirmModal({
@@ -294,7 +178,6 @@ export default function WorkshopOverlay({
         }
   ));
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
-  const [viewMode, setViewMode] = useState<WorkbenchView>('both');
 
   const crateByRole = useMemo(() => {
     const map: Record<string, CrateVoice[]> = {};
@@ -411,18 +294,6 @@ export default function WorkshopOverlay({
     setDraft(buildDraftFromVoice(savedVoice));
   };
 
-  const handleSaveAsNew = () => {
-    if (!draftVoice || !draftVoice.code.trim()) return;
-    const fresh = createBlankWorkshopVoice(selectedRole);
-    const savedVoice: CrateVoice = {
-      ...fresh,
-      name: draftVoice.name,
-      code: draftVoice.code,
-    };
-    onAddToCrate(savedVoice);
-    setDraft(buildDraftFromVoice(savedVoice));
-  };
-
   const handleApplyToLane = () => {
     if (!draft.stageLayerId || !draft.code.trim()) return;
     onApplyToLane(draft.stageLayerId, draft.code);
@@ -458,7 +329,6 @@ export default function WorkshopOverlay({
           {CRATE_ROLES.map((role, idx) => {
             const isSelected = selectedRole === role;
             const count = (crateByRole[role] || []).length;
-            const isHighlighted = navLevel === 'workshop' && workshopTabIndex === idx;
             return (
               <button
                 key={role}
@@ -466,17 +336,9 @@ export default function WorkshopOverlay({
                 onClick={() => switchRole(role)}
                 className="w-full text-left px-3 py-2 text-[11px] cursor-pointer transition-colors"
                 style={{
-                  color: isHighlighted || isSelected ? '#88ff88' : 'rgba(255,255,255,0.4)',
-                  background: isHighlighted
-                    ? 'rgba(136,255,136,0.08)'
-                    : isSelected
-                      ? 'rgba(255,255,255,0.03)'
-                      : 'transparent',
-                  borderLeft: isHighlighted
-                    ? '3px solid #88ff88'
-                    : isSelected
-                      ? '3px solid rgba(136,255,136,0.3)'
-                      : '3px solid transparent',
+                  color: isSelected ? '#88ff88' : 'rgba(255,255,255,0.4)',
+                  background: isSelected ? 'rgba(136,255,136,0.08)' : 'transparent',
+                  borderLeft: isSelected ? '3px solid #88ff88' : '3px solid transparent',
                 }}
               >
                 {role}
@@ -489,22 +351,23 @@ export default function WorkshopOverlay({
         <div className="flex-1 p-4 min-h-0 overflow-auto">
           <div className="mb-4 p-3" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
             <div className="flex items-center justify-between gap-3">
-              <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                {draft.sourceKind === 'crate'
-                  ? `editing saved ${selectedRole}`
-                  : draft.sourceKind === 'stage'
-                    ? `loaded from stage`
-                  : draft.sourceKind === 'new'
-                    ? `new ${selectedRole}`
-                    : `${selectedRole} workbench`}
-              </div>
-              <div className="flex items-center gap-2">
-                <VisualTabs value={viewMode} onChange={setViewMode} />
+              <div className="flex items-center gap-3">
+                <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  {draft.sourceKind === 'crate'
+                    ? `editing saved ${selectedRole}`
+                    : draft.sourceKind === 'stage'
+                      ? `loaded from stage`
+                    : draft.sourceKind === 'new'
+                      ? `new ${selectedRole}`
+                      : `${selectedRole} workbench`}
+                </div>
                 {hasDraft && (
                   <span className="text-[10px]" style={{ color: isDirty ? '#88ff88' : 'rgba(255,255,255,0.22)' }}>
                     {isDraftPreviewing ? `previewing: ${draftVoice?.name ?? 'draft'}` : (isDirty ? 'unsaved changes' : 'saved')}
                   </span>
                 )}
+              </div>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={startNewVoice}
@@ -531,40 +394,16 @@ export default function WorkshopOverlay({
             </div>
 
             <div className="mt-3">
-              {(viewMode === 'code' || viewMode === 'both') && (
-                <textarea
-                  value={draft.code}
-                  onChange={(e) => setDraft((previous) => ({ ...previous, code: e.target.value }))}
-                  className="w-full min-h-[280px] resize-y bg-transparent outline-none text-sm leading-relaxed"
-                  style={{ color: '#ffffff', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 10px' }}
-                  spellCheck={false}
-                  placeholder={`Write ${selectedRole} code here...`}
-                />
-              )}
+              <textarea
+                value={draft.code}
+                onChange={(e) => setDraft((previous) => ({ ...previous, code: e.target.value }))}
+                className="w-full min-h-[280px] resize-y bg-transparent outline-none text-sm leading-relaxed"
+                style={{ color: '#ffffff', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 10px' }}
+                spellCheck={false}
+                placeholder={`Write ${selectedRole} code here...`}
+              />
             </div>
-
-            {(viewMode === 'visual' || viewMode === 'both') && (
-              <div className="mt-3 space-y-3">
-                <DraftVisual code={draft.code} />
-                <PulsePreview code={draft.code} />
-              </div>
-            )}
-
-            {draft.code.trim() && (
-              <div className="mt-3">
-                <SliderRow
-                  code={draft.code}
-                  onSliderChange={(sliderIndex, value) => {
-                    setDraft((previous) => ({
-                      ...previous,
-                      code: updateSliderInCode(previous.code, sliderIndex, value),
-                    }));
-                  }}
-                />
-              </div>
-            )}
-
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -579,7 +418,7 @@ export default function WorkshopOverlay({
                   color: !draftVoice ? 'rgba(255,255,255,0.2)' : (isDraftPreviewing ? '#88ff88' : '#ffffff'),
                 }}
               >
-                {isDraftPreviewing ? 'stop' : 'preview'}
+                {isDraftPreviewing ? 'stop preview' : 'preview'}
               </button>
               <button
                 type="button"
@@ -592,18 +431,6 @@ export default function WorkshopOverlay({
                 }}
               >
                 {draft.sourceKind === 'crate' ? (isDirty ? 'save' : 'saved') : 'save'}
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveAsNew}
-                disabled={!draftVoice || !draftVoice.code.trim()}
-                className="px-2.5 py-1 cursor-pointer"
-                style={{
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  color: !draftVoice || !draftVoice.code.trim() ? 'rgba(255,255,255,0.2)' : '#ffffff',
-                }}
-              >
-                save as new
               </button>
               <button
                 type="button"
@@ -631,6 +458,10 @@ export default function WorkshopOverlay({
                   apply to lane
                 </button>
               )}
+            </div>
+
+            <div className="mt-3">
+              <PulsePreview code={draft.code} />
             </div>
 
             {draft.sourceKind === 'stage' && (
