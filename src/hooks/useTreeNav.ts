@@ -81,6 +81,8 @@ export interface TreeNavState {
   enterLane: (laneIdx: number) => void;
   openCrate: () => void;
   openCrateRole: (roleIdx: number) => void;
+  openWorkshopPanel: () => void;
+  closeWorkshopPanel: () => void;
 }
 
 export function useTreeNav(params: UseTreeNavParams): TreeNavState {
@@ -185,12 +187,17 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
       return;
     }
 
-    // W — jump to workshop (from any level except parameter/editing)
+    // W — toggle workshop (from any level except parameter/editing)
     if (event.key === 'w' && navLevel !== 'parameter' && navLevel !== 'workshop-parameter') {
-      if (navLevel === 'workshop' || navLevel === 'workshop-variant') return; // already there
-      openWorkshop();
-      setNavLevel('workshop');
-      setWorkshopTabIndex(0);
+      if (navLevel === 'workshop' || navLevel === 'workshop-variant') {
+        closeWorkshop();
+        setNavLevel('stage');
+        setWorkshopTabIndex(0);
+      } else {
+        openWorkshop();
+        setNavLevel('workshop');
+        setWorkshopTabIndex(0);
+      }
       return;
     }
 
@@ -559,6 +566,18 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
     setCrateVoiceIndex(0);
   }, []);
 
+  const openWorkshopPanel = useCallback(() => {
+    openWorkshop();
+    setNavLevel('workshop');
+    setWorkshopTabIndex(0);
+  }, [openWorkshop]);
+
+  const closeWorkshopPanel = useCallback(() => {
+    closeWorkshop();
+    setNavLevel('stage');
+    setWorkshopTabIndex(0);
+  }, [closeWorkshop]);
+
   return {
     navLevel,
     stageIndex,
@@ -578,5 +597,7 @@ export function useTreeNav(params: UseTreeNavParams): TreeNavState {
     enterLane,
     openCrate,
     openCrateRole,
+    openWorkshopPanel,
+    closeWorkshopPanel,
   };
 }

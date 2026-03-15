@@ -21,10 +21,30 @@ declare global {
 
 type AppView = 'landing' | 'perform';
 type SavedTake = { title: string; duration: string };
+type WorkshopStageSeed = {
+  layerId: string;
+  label: string;
+  code: string;
+  role: VoiceRole;
+} | null;
 
 function extractBpm(code: string): number {
   const match = code.match(/setCps\((?:slider\()?([\d.]+)/);
   return match ? parseFloat(match[1]) : 120;
+}
+
+function guessRole(label: string, code = ''): VoiceRole | null {
+  const haystack = `${label} ${code}`.toLowerCase();
+  if (haystack.includes('kick') || haystack.includes('bd')) return 'kick';
+  if (haystack.includes('hat') || haystack.includes('hh')) return 'hats';
+  if (haystack.includes('snare') || haystack.includes('sd') || haystack.includes('clap') || haystack.includes('cp')) return 'snare';
+  if (haystack.includes('bass') || haystack.includes('sub')) return 'bass';
+  if (haystack.includes('pad') || haystack.includes('chord') || haystack.includes('supersaw') || haystack.includes('rhodes')) return 'pad';
+  if (haystack.includes('lead') || haystack.includes('melody')) return 'lead';
+  if (haystack.includes('texture') || haystack.includes('noise') || haystack.includes('dust')) return 'texture';
+  if (haystack.includes('perc') || haystack.includes('rim') || haystack.includes('tom') || haystack.includes('tabla')) return 'perc';
+  if (haystack.includes('fx') || haystack.includes('cr') || haystack.includes('impact') || haystack.includes('swell')) return 'fx';
+  return null;
 }
 
 
@@ -109,6 +129,7 @@ export default function App() {
   const [soloId, setSoloId] = useState<string | null>(null);
   const [crate, setCrate] = useState<CrateVoice[]>(() => loadCrate());
   const [previewVoice, setPreviewVoice] = useState<CrateVoice | null>(null);
+  const [workshopStageSeed, setWorkshopStageSeed] = useState<WorkshopStageSeed>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const strudelReady = useRef(false);
@@ -364,7 +385,25 @@ export default function App() {
 
   const openWorkshopCb = useCallback(() => {
     setSavedTake(null);
-  }, []);
+    const selectedLayerId = selectedLayerRef.current;
+    if (!selectedLayerId) {
+      setWorkshopStageSeed(null);
+      return;
+    }
+
+    const selectedLayer = layers.find((layer) => layer.id === selectedLayerId);
+    if (!selectedLayer) {
+      setWorkshopStageSeed(null);
+      return;
+    }
+
+    setWorkshopStageSeed({
+      layerId: selectedLayer.id,
+      label: selectedLayer.label,
+      code: selectedLayer.code,
+      role: guessRole(selectedLayer.label, selectedLayer.code) ?? 'bass',
+    });
+  }, [layers]);
 
   const undoCb = useCallback(() => {
     if (history.length === 0) return;
@@ -381,6 +420,7 @@ export default function App() {
   }, [history, mutedIds, soloId]);
 
   const closeWorkshopCb = useCallback(() => {
+    setWorkshopStageSeed(null);
     void restoreStageAudio();
   }, [restoreStageAudio]);
 
@@ -459,54 +499,103 @@ export default function App() {
         )}
       </div>
 
-      <div className="flex-1 overflow-auto min-h-0" style={{ background: 'rgba(0,0,0,0.08)' }}>
-        {savedTake ? (
-          <div className="h-full flex items-center justify-center px-4 py-8">
-            <div className="w-full max-w-xl p-6" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
-              <div className="text-lg text-white">TAKE SAVED</div>
-              <div className="mt-6 text-base text-white">{savedTake.title}</div>
-              <div className="mt-2 text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>duration: {savedTake.duration}</div>
-              <div className="mt-6 flex gap-2">
-                <button
-                  type="button"
-                  disabled
-                  className="px-3 py-1.5 text-[11px]"
-                  style={{ border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.35)' }}
-                  title="Audio take playback comes later."
-                >
-                  ▶ play back
-                </button>
-                <button
-                  type="button"
-                  onClick={handleStartNewSet}
-                  className="px-3 py-1.5 text-[11px] cursor-pointer"
-                  style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
-                >
-                  start new set
-                </button>
+      <div className="flex-1 flex min-h-0">
+        {/* Left: Stage area */}
+        <div className="flex-1 overflow-auto" style={{ background: 'rgba(0,0,0,0.08)' }}>
+          {savedTake ? (
+            <div className="h-full flex items-center justify-center px-4 py-8">
+              <div className="w-full max-w-xl p-6" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
+                <div className="text-lg text-white">TAKE SAVED</div>
+                <div className="mt-6 text-base text-white">{savedTake.title}</div>
+                <div className="mt-2 text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>duration: {savedTake.duration}</div>
+                <div className="mt-6 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleStartNewSet}
+                    className="px-3 py-1.5 text-[11px] cursor-pointer"
+                    style={{ border: '1px solid rgba(255,255,255,0.12)', color: '#ffffff' }}
+                  >
+                    start new set
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ) : nav.workshopOpen ? (
-          <div
-            className="py-3"
-            style={{ animation: 'workshopSlideIn 0.25s ease-out' }}
-          >
-            <style>{`
-              @keyframes workshopSlideIn {
-                from { opacity: 0; transform: translateY(24px); }
-                to { opacity: 1; transform: translateY(0); }
-              }
-            `}</style>
-            <div className="mx-4">
+          ) : !hasCode ? (
+            <div className="h-full flex flex-col items-center justify-center px-4 text-center">
+              <div className="text-[14px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                tab to navigate · enter to open · esc to go back
+              </div>
+              <div className="mt-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                press tab to start
+              </div>
+              <div className="mt-8 space-y-1.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.18)' }}>
+                <div>C — Crate (browse your catalog)</div>
+                <div>W — Workshop (write new pieces)</div>
+                <div>Spacebar — Play / Stop</div>
+                <div>R — Record</div>
+              </div>
+            </div>
+          ) : (
+            <div className="py-3">
+              {layers.map((layer, index) => (
+                <LayerCard
+                  key={layer.id}
+                  layer={layer}
+                  index={index}
+                  sliderOffset={layerOffsets[index]}
+                  onSliderChange={handleSliderChange}
+                  onToggleMute={() => toggleMute(layer.id)}
+                  onToggleSolo={() => toggleSolo(layer.id)}
+                  onFocus={() => {
+                    if (nav.selectedLayerId === layer.id && nav.navLevel === 'stage') {
+                      nav.enterLane(index);
+                    } else {
+                      nav.jumpToLane(index);
+                    }
+                  }}
+                  onUpdateCode={(nextCode) => updateLayerCode(layer.id, nextCode)}
+                  onChangeSound={(nextSound) => updateLayerSound(layer.id, nextSound)}
+                  isMuted={mutedIds.has(layer.id)}
+                  isSoloed={soloId === layer.id}
+                  isSelected={nav.selectedLayerId === layer.id}
+                  navLevel={nav.selectedLayerId === layer.id ? nav.navLevel : 'stage'}
+                  lineIndex={nav.selectedLayerId === layer.id ? nav.lineIndex : -1}
+                  isPlaying={isPlaying}
+                  bpm={bpm}
+                  disabled={false}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Right: Workshop drawer */}
+        <div
+          className="shrink-0 min-h-0"
+          style={{
+            width: nav.workshopOpen ? 'min(52vw, 760px)' : '22px',
+            borderLeft: '1px solid rgba(255,255,255,0.12)',
+            background: 'rgba(0,0,0,0.18)',
+            transition: 'width 180ms ease',
+          }}
+        >
+          {nav.workshopOpen ? (
+            <div className="h-full overflow-auto">
               <WorkshopOverlay
                 crate={crate}
                 stagedVoiceNames={stagedVoiceNames}
                 previewingId={previewVoice?.id ?? null}
                 navLevel={nav.navLevel}
                 workshopTabIndex={nav.workshopTabIndex}
-                onClose={closeWorkshopCb}
+                initialRole={workshopStageSeed?.role}
+                initialStageSeed={workshopStageSeed}
+                onClose={() => {
+                  closeWorkshopCb();
+                  nav.closeWorkshopPanel();
+                }}
                 onPreview={previewWorkshopVoice}
+                onStopPreview={() => {
+                  void restoreStageAudio();
+                }}
                 onAddToStage={async (voice) => {
                   await appendVoiceToStage(voice.code, voice.name);
                 }}
@@ -516,59 +605,31 @@ export default function App() {
                 onAddToCrate={(voice) => {
                   setCrate((prev) => [...prev, voice]);
                 }}
-                onUpdateCrateVoice={(voiceId, newCode) => {
-                  setCrate((prev) => prev.map((v) => v.id === voiceId ? { ...v, code: newCode } : v));
+                onUpdateCrateVoice={(voiceId, updates) => {
+                  setCrate((prev) => prev.map((v) => (
+                    v.id === voiceId ? { ...v, name: updates.name, code: updates.code } : v
+                  )));
+                }}
+                onApplyToLane={(layerId, nextCode) => {
+                  const targetLayer = layers.find((layer) => layer.id === layerId);
+                  if (targetLayer) setStatusMessage(`updated ${targetLayer.label}`);
+                  void updateLayerCode(layerId, nextCode);
                 }}
               />
             </div>
-          </div>
-        ) : !hasCode ? (
-          <div className="h-full flex flex-col items-center justify-center px-4 text-center">
-            <div className="text-[14px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
-              tab to navigate · enter to open · esc to go back
-            </div>
-            <div className="mt-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
-              press tab to start
-            </div>
-            <div className="mt-8 space-y-1.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.18)' }}>
-              <div>C — Crate (browse your catalog)</div>
-              <div>W — Workshop (add new pieces)</div>
-              <div>Spacebar — Play / Stop</div>
-              <div>R — Record</div>
-            </div>
-          </div>
-        ) : (
-          <div className="py-3">
-            {layers.map((layer, index) => (
-              <LayerCard
-                key={layer.id}
-                layer={layer}
-                index={index}
-                sliderOffset={layerOffsets[index]}
-                onSliderChange={handleSliderChange}
-                onToggleMute={() => toggleMute(layer.id)}
-                onToggleSolo={() => toggleSolo(layer.id)}
-                onFocus={() => {
-                  if (nav.selectedLayerId === layer.id && nav.navLevel === 'stage') {
-                    nav.enterLane(index);
-                  } else {
-                    nav.jumpToLane(index);
-                  }
-                }}
-                onUpdateCode={(nextCode) => updateLayerCode(layer.id, nextCode)}
-                onChangeSound={(nextSound) => updateLayerSound(layer.id, nextSound)}
-                isMuted={mutedIds.has(layer.id)}
-                isSoloed={soloId === layer.id}
-                isSelected={nav.selectedLayerId === layer.id}
-                navLevel={nav.selectedLayerId === layer.id ? nav.navLevel : 'stage'}
-                lineIndex={nav.selectedLayerId === layer.id ? nav.lineIndex : -1}
-                isPlaying={isPlaying}
-                bpm={bpm}
-                disabled={false}
-              />
-            ))}
-          </div>
-        )}
+          ) : (
+            <button
+              type="button"
+              onClick={nav.openWorkshopPanel}
+              className="h-full w-full flex items-center justify-center cursor-pointer"
+              style={{ color: 'rgba(255,255,255,0.55)' }}
+              aria-label="Open workshop"
+              title="Open workshop"
+            >
+              <span className="text-[18px]" style={{ transform: 'translateX(-1px)' }}>‹</span>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="shrink-0 px-4 py-1.5 flex items-center justify-between text-[9px]" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.22)' }}>
@@ -582,10 +643,10 @@ export default function App() {
               : nav.navLevel === 'crate'
                 ? 'tab switch role · enter browse voices · esc close'
               : nav.workshopOpen
-                ? 'tab navigate · enter select · p preview · s stage · esc back'
+                ? 'click to edit · p preview · esc close · w toggle'
                 : savedTake
                   ? 'esc dismiss'
-                  : layers.length > 0
+                    : layers.length > 0
                     ? 'tab navigate · enter open · m mute · x remove · w workshop'
                     : 'tab navigate · enter load · w workshop'
           }
