@@ -7,6 +7,7 @@ import LandingPage from './components/LandingPage';
 import WorkshopOverlay from './components/WorkshopOverlay';
 import { parseLayers, reconstructCode } from './lib/parser';
 import { loadCrate, loadSetNames, saveCrate, saveSetNames } from './lib/crateStore';
+import { adjustBpm } from './lib/localOps';
 import { useTreeNav, type NavLevel } from './hooks/useTreeNav';
 import type { CrateVoice, VoiceRole } from './types';
 
@@ -136,6 +137,8 @@ export default function App() {
   const strudelReady = useRef(false);
   const samplesReady = useRef(false);
   const evalTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bpmHoldTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bpmHoldInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingCode = useRef('');
   const isPlayingRef = useRef(false);
   const mutedIdsRef = useRef<Set<string>>(new Set());
@@ -159,6 +162,11 @@ export default function App() {
     const timeout = setTimeout(() => setStatusMessage(null), 2400);
     return () => clearTimeout(timeout);
   }, [statusMessage]);
+
+  useEffect(() => () => {
+    if (bpmHoldTimeout.current) clearTimeout(bpmHoldTimeout.current);
+    if (bpmHoldInterval.current) clearInterval(bpmHoldInterval.current);
+  }, []);
 
   useEffect(() => {
     if (!isRecording) {
@@ -368,9 +376,48 @@ export default function App() {
     });
   };
 
+  const handleAdjustBpm = async (delta: number) => {
+    const nextBpm = Math.max(40, Math.min(220, Math.round(bpm + delta)));
+    if (nextBpm === bpm) return;
+
+    const nextCode = adjustBpm(code, nextBpm);
+    setCode(nextCode);
+
+    if (isPlayingRef.current && layers.length > 0) {
+      try {
+        window.hush();
+      } catch {}
+      const ok = await evalStrudel(nextCode, mutedIds, soloId);
+      if (ok) setIsPlaying(true);
+    }
+
+    setStatusMessage(`tempo ${nextBpm} bpm`);
+  };
+
+  const stopBpmHold = () => {
+    if (bpmHoldTimeout.current) {
+      clearTimeout(bpmHoldTimeout.current);
+      bpmHoldTimeout.current = null;
+    }
+    if (bpmHoldInterval.current) {
+      clearInterval(bpmHoldInterval.current);
+      bpmHoldInterval.current = null;
+    }
+  };
+
+  const startBpmHold = (delta: number) => {
+    stopBpmHold();
+    void handleAdjustBpm(delta);
+    bpmHoldTimeout.current = setTimeout(() => {
+      bpmHoldInterval.current = setInterval(() => {
+        void handleAdjustBpm(delta);
+      }, 90);
+    }, 320);
+  };
+
 
   const handlePlay = async () => {
-    if (!code) return;
+    if (!code || layers.length === 0) return;
     const ok = await evalStrudel(code);
     if (ok) setIsPlaying(true);
   };
@@ -385,7 +432,7 @@ export default function App() {
 
   const handleRecordToggle = async () => {
     if (!isRecording) {
-      if (!code) return;
+      if (!code || layers.length === 0) return;
       if (!isPlayingRef.current) {
         const ok = await evalStrudel(code);
         if (ok) setIsPlaying(true);
@@ -414,7 +461,7 @@ export default function App() {
     setCode('');
   };
 
-  const hasCode = !!code;
+  const hasActiveLayers = layers.length > 0;
   const stagedVoiceNames = useMemo(() => new Set(layers.map((layer) => layer.label)), [layers]);
 
   // Refs for callbacks that need current values without causing re-renders
@@ -513,9 +560,39 @@ export default function App() {
         </div>
       </div>
 
-      <div className="shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.15)', minHeight: isCompactLayout ? '62px' : '80px' }}>
+      <div className="shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.15)', minHeight: isCompactLayout ? '84px' : '102px' }}>
         <div className="px-4 py-2 text-[10px] uppercase tracking-[0.2em]" style={{ color: 'rgba(255,255,255,0.35)' }}>
           score
+        </div>
+        <div className="px-4 pb-2 flex items-center gap-2 text-[12px]">
+          <span style={{ color: 'rgba(255,255,255,0.45)' }}>BPM:</span>
+          <button
+            type="button"
+            onPointerDown={() => startBpmHold(-1)}
+            onPointerUp={stopBpmHold}
+            onPointerLeave={stopBpmHold}
+            onPointerCancel={stopBpmHold}
+            className="cursor-pointer"
+            style={{ color: 'rgba(255,255,255,0.72)' }}
+            aria-label="Decrease BPM"
+            title="Decrease BPM"
+          >
+            -
+          </button>
+          <span className="min-w-[32px] text-center text-white">{Math.round(bpm)}</span>
+          <button
+            type="button"
+            onPointerDown={() => startBpmHold(1)}
+            onPointerUp={stopBpmHold}
+            onPointerLeave={stopBpmHold}
+            onPointerCancel={stopBpmHold}
+            className="cursor-pointer"
+            style={{ color: 'rgba(255,255,255,0.72)' }}
+            aria-label="Increase BPM"
+            title="Increase BPM"
+          >
+            +
+          </button>
         </div>
         {layers.length > 0 ? (
           <SequencerOverview
@@ -602,7 +679,7 @@ export default function App() {
                 </div>
               </div>
             </div>
-          ) : !hasCode ? (
+          ) : !hasActiveLayers ? (
             <div className="h-full flex flex-col items-center justify-center px-4 text-center">
               <div className="text-[14px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
                 tab to navigate · enter to open · esc to go back
