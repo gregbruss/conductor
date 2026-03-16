@@ -1,12 +1,18 @@
 import type { CrateVoice } from '../types';
 
-export const DEFAULT_SET_NAMES = ['chrome', 'driftwood', 'nerve'] as const;
+export const DEFAULT_SET_NAMES = ['chrome', 'driftwood', 'nerve', 'velvet', 'quartz', 'ambient', 'house', 'garage', 'piano'] as const;
 
 export function inferSetName(id: string, name: string): string {
   const haystack = `${id} ${name}`.toLowerCase();
   if (haystack.includes('chrome')) return 'chrome';
   if (haystack.includes('driftwood')) return 'driftwood';
   if (haystack.includes('nerve')) return 'nerve';
+  if (haystack.includes('velvet')) return 'velvet';
+  if (haystack.includes('quartz')) return 'quartz';
+  if (haystack.includes('ambient')) return 'ambient';
+  if (haystack.includes('house')) return 'house';
+  if (haystack.includes('garage')) return 'garage';
+  if (haystack.includes('piano')) return 'piano';
   return 'set a';
 }
 

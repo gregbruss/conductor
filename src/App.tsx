@@ -209,6 +209,8 @@ export default function App() {
       if (typeof window.samples === 'function') {
         await window.samples('github:tidalcycles/dirt-samples');
         await window.samples('https://raw.githubusercontent.com/felixroos/dough-samples/main/tidal-drum-machines.json');
+        await window.samples('https://raw.githubusercontent.com/felixroos/dough-samples/main/EmuSP12.json');
+        await window.samples('https://raw.githubusercontent.com/felixroos/dough-samples/main/piano.json');
       }
       samplesReady.current = true;
     } catch (samplesError) {

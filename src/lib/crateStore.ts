@@ -30,6 +30,65 @@ const DEFAULT_CRATE_PRESET_IDS = [
   'pad-chrome-field',
   'lead-chrome-sequence',
   'fx-chrome-sweep',
+  // velvet — smoky, late-night, dubbed-out
+  'kick-velvet-thump',
+  'hats-velvet-dust',
+  'snare-velvet-snap',
+  'bass-velvet-rolling',
+  'pad-velvet-mist',
+  'lead-velvet-trace',
+  'texture-velvet-air',
+  'perc-velvet-knock',
+  'fx-velvet-fall',
+  // quartz — crystalline, glitchy, industrial cold
+  'kick-quartz-click',
+  'hats-quartz-shards',
+  'snare-quartz-rim',
+  'bass-quartz-grid',
+  'pad-quartz-glacier',
+  'lead-quartz-ping',
+  'texture-quartz-static',
+  'perc-quartz-tock',
+  'fx-quartz-beam',
+  // ambient — spacious, slow, suspended
+  'kick-ambient-pulse',
+  'hats-ambient-air',
+  'bass-ambient-drift',
+  'pad-ambient-cloud',
+  'lead-ambient-glass',
+  'texture-ambient-hush',
+  'perc-ambient-bloom',
+  'fx-ambient-rise',
+  // house — warm, bouncy, direct
+  'kick-house-foundation',
+  'hats-house-chop',
+  'snare-house-clack',
+  'bass-house-bounce',
+  'pad-house-stabs',
+  'lead-house-organ',
+  'texture-house-tape',
+  'perc-house-rattle',
+  'fx-house-lift',
+  // garage — swung, rubbery, restless
+  'kick-garage-skip',
+  'hats-garage-swing',
+  'snare-garage-snap',
+  'bass-garage-rubber',
+  'pad-garage-wash',
+  'lead-garage-glint',
+  'texture-garage-air',
+  'perc-garage-click',
+  'fx-garage-rise',
+  // piano — warm keys, felt hammers, melodic glow
+  'kick-piano-step',
+  'hats-piano-brush',
+  'snare-piano-clap',
+  'bass-piano-walk',
+  'pad-piano-bloom',
+  'lead-piano-figure',
+  'texture-piano-room',
+  'perc-piano-knock',
+  'fx-piano-fall',
 ];
 
 function presetToCrateVoice(presetId: string, index: number): CrateVoice | null {
@@ -54,6 +113,12 @@ export function getDefaultCrate(): CrateVoice[] {
     .filter((voice): voice is CrateVoice => voice !== null);
 }
 
+function mergeMissingStarterVoices(crate: CrateVoice[]): CrateVoice[] {
+  const existingIds = new Set(crate.map((voice) => voice.id));
+  const missingStarters = getDefaultCrate().filter((voice) => !existingIds.has(voice.id));
+  return missingStarters.length > 0 ? [...crate, ...missingStarters] : crate;
+}
+
 function normalizeCrateVoice(voice: any): CrateVoice {
   return {
     ...voice,
@@ -69,7 +134,7 @@ export function loadCrate(): CrateVoice[] {
     if (!raw) return getDefaultCrate();
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) && parsed.length > 0
-      ? parsed.map(normalizeCrateVoice)
+      ? mergeMissingStarterVoices(parsed.map(normalizeCrateVoice))
       : getDefaultCrate();
   } catch {
     return getDefaultCrate();
