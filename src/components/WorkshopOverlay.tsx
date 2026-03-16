@@ -589,11 +589,27 @@ export default function WorkshopOverlay({
       <div className="flex flex-1 min-h-0">
         <div className="shrink-0 w-[120px]" style={{ borderRight: '1px solid rgba(255,255,255,0.08)' }}>
           <div className="px-3 pt-3 pb-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-            <div
-              className="mb-2 text-[9px] uppercase tracking-[0.18em]"
-              style={{ color: 'rgba(255,255,255,0.24)' }}
-            >
-              My Sets
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div
+                className="text-[9px] uppercase tracking-[0.18em]"
+                style={{ color: 'rgba(255,255,255,0.24)' }}
+              >
+                My Sets
+              </div>
+              <button
+                type="button"
+                onClick={() => setNewSetState({ open: true, value: '' })}
+                className="px-1.5 py-0.5 text-[11px] cursor-pointer"
+                style={{
+                  border: '1px solid rgba(136,255,136,0.18)',
+                  color: '#88ff88',
+                  lineHeight: 1,
+                }}
+                aria-label="Create new set"
+                title="Create new set"
+              >
+                +
+              </button>
             </div>
             <div className="space-y-1">
               {availableSets.map((setName) => {
